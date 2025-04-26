@@ -42,17 +42,14 @@ function main()
         out = Gray.(complement.(out))
         save(output * ".png", out)
     else
-        args["steps"] = div(args["steps"], length(colors))
-
         @info "Loading input as color image: '$input'"
-        imgs = MonteCarloArt.load_color_image(input, colors)
+        inp = MonteCarloArt.load_color_image(input)
 
         @info "Running RGB algorithm with colors $(hex.(colors))"
-        imgs = [MonteCarloArt.run(color, args) for color in imgs]
+        out = MonteCarloArt.run(inp, args)
 
         @info "Saving final output image to: '$output'"
-        out = MonteCarloArt.aggreate_images(imgs, colors)
-        save(output * ".png", out)
+        save(output * ".png", complement.(out))
     end
     @info "Done"
 end
