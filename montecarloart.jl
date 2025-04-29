@@ -146,25 +146,31 @@ end
 end
 
 """ Render list of circles into SVG content. """
-function render_svg(circles::Vector{NamedTuple}, width::Int, height::Int)::String
+function render_svg(circles::Vector{NamedTuple}, height::Int, width::Int)::String
     header = """
     <svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height" viewBox="0 0 $width $height">
     """
-
-    body = join([
-            """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$(lab_to_rgb_hex(c.color))" />"""
-            for c in circles
-        ], "\n")
-
+    body = join([draw_circle(c) for c in circles], "\n")
     footer = "</svg>"
 
     return join([header, body, footer], "\n")
+end
+
+""" Draw a circle in SVG format. """
+function draw_circle(c::NamedTuple)::String
+    fill = lab_to_rgb_hex(c.color)
+    stroke = Lab(c.color.l + (100 + c.color.l) * 0.10, c.color.a * (1 + 0.10), c.color.b * (1 + 0.10)) |> lab_to_rgb_hex
+    """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.4" />"""
 end
 
 """ Convert Lab color to RGB hex string. """
 function lab_to_rgb_hex(color::Lab{Float64})::String
     rgb = complement(convert(Colors.RGB{N0f8}, color))
     @sprintf("#%02X%02X%02X", round(Int, 255 * rgb.r), round(Int, 255 * rgb.g), round(Int, 255 * rgb.b))
+end
+
+function lighten(c::Lab{Float64}, factor::Float64)::Lab{Float64}
+    Lab(c.l + (100 - c.l) * factor, c.a * (1 - factor), c.b * (1 - factor))
 end
 
 end
