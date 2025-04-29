@@ -47,6 +47,7 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     base_energy = args["circle-tollerance"]
     steps = args["steps"]
 
+    Temp = base_energy * 2
     accept, mc_accept, misses = 0, 0, 0
 
     for step in 1:steps
@@ -64,11 +65,11 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
         draw_circle = false
 
         @debug "Applying Monte Carlo acceptance criteria"
-        if energy < base_energy
+        dE = energy - base_energy
+        if dE < 0
             draw_circle = true
             accept += 1
-        elseif (energy / base_energy) < rand()
-            @info (energy / base_energy)
+        elseif exp(-dE / Temp) > rand()
             draw_circle = true
             mc_accept += 1
         else
@@ -79,7 +80,7 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
         if draw_circle
             push!(circles, (center=point, radius=radius, color=color))
             for i in points
-                penalty[i] += 1
+                penalty[i] = 1
             end
         end
     end
