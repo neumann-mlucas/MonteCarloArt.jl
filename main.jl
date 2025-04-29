@@ -3,72 +3,71 @@ module MonteCarloArtMain
 include("montecarloart.jl")
 
 using .MonteCarloArt
-
 using ArgParse
 using Images
 using Logging
 
+""" Default configuration parameters. """
 const DefaultArgs = Dict{String,Any}((
     "steps" => 100000,
     "color" => false,
     "colors" => "#FF0000,#00FF00,#0000FF",
 ))
 
-
+""" Main function: parse arguments, load image, run algorithm, and save output. """
 function main()
-    # parse command line arguments
     args = parse_cmd()
 
-    # verbose mode should use debug log level log level
+    # Set debug logging level if verbose mode is enabled
     if args["verbose"]
-        ENV["JULIA_DEBUG"] = Main
+        global_logger(ConsoleLogger(stderr, Logging.Debug))
     end
 
-    # use command line options to define algorithm parameters
+    # Merge default parameters with command line arguments
     args = merge(DefaultArgs, args)
-    input, output = args["input"], args["output"]
+    input_path, output_path = args["input"], args["output"]
 
-    @info "Loading input image: '$input'"
-    if !args["color"]
-        inp = MonteCarloArt.load_image(input)
-    else
-        inp = MonteCarloArt.load_color_image(input)
-    end
+    @info "Loading input image: '$input_path'"
+    inp = args["color"] ? load_color_image(input_path) : load_image(input_path)
 
-    @info "Running MC algorithm"
-    out = MonteCarloArt.run(inp, args)
+    @info "Running Monte Carlo algorithm"
+    out = run(inp, args)
 
-    @info "Saving final output image to: '$output'"
+    @info "Saving output image to: '$(output_path).png'"
     out = complement.(convert.(RGB{N0f8}, out))
-    save(output * ".png", out)
+    save(output_path * ".png", out)
 
-    @info "Done"
+    @info "Processing completed"
 end
 
+""" Parse command-line arguments using ArgParse. """
 function parse_cmd()
-    # Create an argument parser
     parser = ArgParseSettings()
-    # Add arguments to the parser
     @add_arg_table parser begin
         "--input", "-i"
-        help = "input image path"
+        help = "Input image path (required)"
         arg_type = String
         required = true
+
         "--output", "-o"
-        help = "output image path whiteout extension"
+        help = "Output image path (without extension)"
         arg_type = String
         default = "output"
+
         "--steps"
-        help = "Number iterations (proporcitonal to the number of circles)"
+        help = "Number of iterations (proportional to number of circles)"
         arg_type = Int
         default = 200000
+
         "--color"
-        help = "Color mode"
+        help = "Enable color mode (use input colors instead of grayscale)"
         action = :store_true
+
         "--verbose"
-        help = "Verbose mode"
+        help = "Enable verbose logging (debug level)"
         action = :store_true
     end
+
     parse_args(parser)
 end
 
