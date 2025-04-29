@@ -11,11 +11,9 @@ using Statistics
 
 const Image = Matrix{Lab{Float64}}
 const DefaultArgs = Dict{String,Any}()
-const N_PALLET = 64
-const REL_RADIUS = 0.0030
-const REL_STD_RADIUS = 0.6
+const REL_RADIUS = 0.0032
+const REL_STD_RADIUS = 0.4
 const MIN_RADIUS = 2.0
-const BASE_ENERGY = 0.25
 
 export load_color_image, load_image, run
 
@@ -36,13 +34,12 @@ end
 
 """ Main Monte Carlo Art algorithm. """
 function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
-    @info "Starting Monte Carlo Art generation"
     h, w = size(inp)
     penalty = zeros(Float64, h, w)
     circles = NamedTuple[]
 
-    @info "Generating image color palette with $(args["color-pallet"]) colors"
     pallet = get_pallet(inp, args)
+    @info "Finished generating color pallet with $(args["color-pallet"]) colors"
 
     base_energy = args["circle-tollerance"]
     steps = args["steps"]
@@ -84,11 +81,11 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
             end
         end
     end
-    to_pct(x) = 100 * round(x / steps, digits=2)
-    @info "Completed image generation:"
-    @info "  - accept:    $accept ($(to_pct(accept)) %)"
-    @info "  - mc_accept: $mc_accept ($(to_pct(mc_accept)) %)"
-    @info "  - misses:    $misses ($(to_pct(misses)) %)"
+    to_pct(x) = lpad(round(Int, 100 * x / steps), 3)
+    @info "Finished algorithm steps with $(length(circles)) circles to drawn"
+    @info "  - accept:    $(lpad(accept, 8)) [$(to_pct(accept))%]"
+    @info "  - mc_accept: $(lpad(mc_accept, 8)) [$(to_pct(mc_accept))%]"
+    @info "  - misses:    $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
     if args["svg"]
         return render_svg(circles, h, w)
@@ -159,18 +156,14 @@ end
 """ Draw a circle in SVG format. """
 function draw_circle(c::NamedTuple)::String
     fill = lab_to_rgb_hex(c.color)
-    stroke = Lab(c.color.l + (100 + c.color.l) * 0.10, c.color.a * (1 + 0.10), c.color.b * (1 + 0.10)) |> lab_to_rgb_hex
-    """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.4" />"""
+    stroke = Lab(c.color.l + (100 + c.color.l) * 0.12, c.color.a * (1 + 0.12), c.color.b * (1 + 0.12)) |> lab_to_rgb_hex
+    """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.5" />"""
 end
 
 """ Convert Lab color to RGB hex string. """
 function lab_to_rgb_hex(color::Lab{Float64})::String
     rgb = complement(convert(Colors.RGB{N0f8}, color))
     @sprintf("#%02X%02X%02X", round(Int, 255 * rgb.r), round(Int, 255 * rgb.g), round(Int, 255 * rgb.b))
-end
-
-function lighten(c::Lab{Float64}, factor::Float64)::Lab{Float64}
-    Lab(c.l + (100 - c.l) * factor, c.a * (1 - factor), c.b * (1 - factor))
 end
 
 end

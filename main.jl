@@ -78,12 +78,12 @@ function parse_cmd()
         "--color-pallet"
         help = "Number of colors in the palette (default: 64)"
         arg_type = Int
-        default = 64
+        default = 32
 
         "--circle-tollerance", "-t"
         help = "Parameters that penalizes overlapping circles"
         arg_type = Float64
-        default = 0.25
+        default = 0.08
 
         "--verbose"
         help = "Enable verbose logging (debug level)"
