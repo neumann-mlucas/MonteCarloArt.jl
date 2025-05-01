@@ -9,7 +9,7 @@ using Logging
 
 """ Default configuration parameters. """
 const DefaultArgs = Dict{String,Any}((
-    "circle-tollerance" => 0.25,
+    "overlap-tolerance" => 0.25,
     "color" => false,
     "color-pallet" => 64,
     "steps" => 200000,
@@ -80,7 +80,7 @@ function parse_cmd()
         arg_type = Int
         default = 32
 
-        "--circle-tollerance", "-t"
+        "--overlap-tolerance", "-t"
         help = "Parameters that penalizes overlapping circles"
         arg_type = Float64
         default = 0.08

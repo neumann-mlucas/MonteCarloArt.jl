@@ -41,7 +41,7 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     pallet = get_pallet(inp, args)
     @info "Finished generating color pallet with $(args["color-pallet"]) colors"
 
-    base_energy = args["circle-tollerance"]
+    base_energy = args["overlap-tolerance"]
     steps = args["steps"]
 
     Temp = base_energy * 2

@@ -59,7 +59,7 @@ Run the script via the command line:
 ```bash
 $ julia main.jl --help
 usage: main.jl -i INPUT [-o OUTPUT] [-s STEPS] [--svg] [--color]
-               [--color-pallet COLOR-PALLET] [-t OVERLAP-TOLLERANCE]
+               [--color-pallet COLOR-PALLET] [-t OVERLAP-TOLERANCE]
                [--verbose] [-h]
 
 optional arguments:
@@ -74,7 +74,7 @@ optional arguments:
   --color-pallet COLOR-PALLET
                         Number of colors in the palette (default: 64)
                         (type: Int64, default: 32)
-  -t, --overlap-tollerance OVERLAP-TOLLERANCE
+  -t, --overlap-tolerance OVERLAP-TOLERANCE
                         Parameters that penalizes overlapping circles
                         (type: Float64, default: 0.08)
   --verbose             Enable verbose logging (debug level)
