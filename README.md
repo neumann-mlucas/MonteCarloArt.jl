@@ -11,7 +11,7 @@ $$
 $$
 
 $$
-\Delta E = \text{energy} - \text{overlap\_tolerance\_energy}
+\Delta E = \text{energy} - \text{overlap tolerance energy}
 $$
 
 $$
@@ -31,13 +31,11 @@ You can control several parameters to influence the output:
 
 2. **"--color-pallet":** number of colors in the palette
 
-3. **"--overlap-tolerance":**The base overlap tolerance (controls how closely dots can be placed)
+3. **"--overlap-tolerance":** The base overlap tolerance (controls how closely dots can be placed)
 
 
-The script supports gray scale mode and can optionally export the output as an SVG (if your computer can handle a huge SVG). Higher-resolution input images generally produce better results.
+The script supports gray scale mode and can optionally export the output as an SVG (**if your computer can handle a huge SVG**). Higher-resolution input images generally produce better results.
 
-
----
 
 ## Requirements
 
@@ -49,8 +47,6 @@ The following Julia packages are required:
 - `Images`
 - `Logging`
 
-
----
 
 ## Usage
 
@@ -89,6 +85,12 @@ julia -O3 main.jl -i input.jpg -o output.png
 ```
 
 
+- **Coler Mode with Custom Color Pallet:**
+```bash
+julia -O3 main.jl --color --color-pallet 64 -i input.jpg -o output.png
+```
+
+
 - **More Iterative Steps:**
 ```bash
 julia -O3 main.jl --steps 400000 -i input.jpg -o output.png
@@ -107,14 +109,10 @@ julia -O3 main.jl --color --steps 400000 --svg -i input.jpg -o output.png
 ```
 
 
----
-
 ### Gallery
 
 > WIP
 
-
----
 
 ### TODO
 
