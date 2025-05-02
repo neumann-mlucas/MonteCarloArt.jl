@@ -1,7 +1,7 @@
 # MonteCarloArt.jl
 
 <p align="center">
-  <img src="examples/marcus_aurelius.svg" alt="Marcus Aurelius Bust" width="300px" />
+  <img src="examples/marcus_aurelius.svg" alt="Marcus Aurelius Bust" width="600px" />
 </p>
 
 MonteCarloArt.jl is a Julia script that recreates images in a pointillist style using a Monte Carlo-inspired algorithm. The process begins by extracting a reduced color palette of N colors from the original image. The script then attempts to place small, non-overlapping colored dots onto a blank canvas.
@@ -116,12 +116,12 @@ julia -O3 main.jl --color --steps 400000 --svg -i input.jpg -o output.png
 - **City of Sao Paulo**
 
 <p align="center">
-  <img src="examples/sao_paulo_01.svg" alt="SP 01" width="600px" />
+  <img src="examples/sao_paulo_01.svg" alt="SP 01" />
 </p>
 
 
 <p align="center">
-  <img src="examples/sao_paulo_02.svg" alt="SP 02" width="600px" />
+  <img src="examples/sao_paulo_02.svg" alt="SP 02" />
 </p>
 
 
