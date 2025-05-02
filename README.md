@@ -116,13 +116,12 @@ julia -O3 main.jl --color --steps 400000 --svg -i input.jpg -o output.png
 - **City of Sao Paulo**
 
 <p align="center">
-  <img src="examples/sao_paulo_01.svg" alt="SP 01" width="200px" />
+  <img src="examples/sao_paulo_01.svg" alt="SP 01" width="600px" />
 </p>
 
-<br>
 
 <p align="center">
-  <img src="examples/sao_paulo_02.svg" alt="SP 02" width="200px" />
+  <img src="examples/sao_paulo_02.svg" alt="SP 02" width="600px" />
 </p>
 
 
