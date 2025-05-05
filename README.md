@@ -31,7 +31,7 @@ You can control several parameters to influence the output:
 
 1. **"--steps":** The number of algorithm steps (more steps = more dots in the canvas)
 
-2. **"--color-pallet":** number of colors in the palette
+2. **"--color-palette":** number of colors in the palette
 
 3. **"--overlap-tolerance":** The base overlap tolerance (controls how closely dots can be placed)
 
@@ -57,7 +57,7 @@ Run the script via the command line:
 ```bash
 $ julia main.jl --help
 usage: main.jl -i INPUT [-o OUTPUT] [-s STEPS] [--svg] [--color]
-               [--color-pallet COLOR-PALLET] [-t OVERLAP-TOLERANCE]
+               [--color-palette COLOR-PALLET] [-t OVERLAP-TOLERANCE]
                [--verbose] [-h]
 
 optional arguments:
@@ -69,7 +69,7 @@ optional arguments:
   --svg                 Save output as SVG instead of PNG
   --color               Enable color mode (use input colors instead of
                         grayscale)
-  --color-pallet COLOR-PALLET
+  --color-palette COLOR-PALLET
                         Number of colors in the palette (default: 64)
                         (type: Int64, default: 32)
   -t, --overlap-tolerance OVERLAP-TOLERANCE
@@ -89,7 +89,7 @@ julia -O3 main.jl -i input.jpg -o output.png
 
 - **Coler Mode with Custom Color Pallet:**
 ```bash
-julia -O3 main.jl --color --color-pallet 64 -i input.jpg -o output.png
+julia -O3 main.jl --color --color-palette 64 -i input.jpg -o output.png
 ```
 
 

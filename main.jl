@@ -11,7 +11,7 @@ using Logging
 const DefaultArgs = Dict{String,Any}((
     "overlap-tolerance" => 0.25,
     "color" => false,
-    "color-pallet" => 64,
+    "color-palette" => 64,
     "steps" => 200000,
     "svg" => false,
 ))
@@ -75,7 +75,7 @@ function parse_cmd()
         help = "Enable color mode (use input colors instead of grayscale)"
         action = :store_true
 
-        "--color-pallet"
+        "--color-palette"
         help = "Number of colors in the palette (default: 64)"
         arg_type = Int
         default = 32

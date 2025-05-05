@@ -38,8 +38,8 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     penalty = zeros(Float64, h, w)
     circles = NamedTuple[]
 
-    pallet = get_pallet(inp, args)
-    @info "Finished generating color pallet with $(args["color-pallet"]) colors"
+    palette = get_palette(inp, args)
+    @info "Finished generating color palette with $(args["color-palette"]) colors"
 
     base_energy = args["overlap-tolerance"]
     steps = args["steps"]
@@ -55,8 +55,8 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
         pixels = getindex.(Ref(inp), points)
 
         avg = mean_color(pixels)
-        idx = argmin(color_distance(c, avg) for c in pallet)
-        color = pallet[idx]
+        idx = argmin(color_distance(c, avg) for c in palette)
+        color = palette[idx]
 
         energy = mean(penalty[p] for p in points)
         draw_circle = false
@@ -101,9 +101,9 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
 end
 
 """ Cluster image colors into a palette using k-means. """
-@inline function get_pallet(img::Image, args::Dict{String,Any})::Vector{Lab{Float64}}
+@inline function get_palette(img::Image, args::Dict{String,Any})::Vector{Lab{Float64}}
     pixels = reshape(collect(channelview(img)), 3, :)
-    result = kmeans(pixels, args["color-pallet"], maxiter=100, display=:none)
+    result = kmeans(pixels, args["color-palette"], maxiter=100, display=:none)
     [Lab{Float64}(c...) for c in eachcol(result.centers)]
 end
 
@@ -155,6 +155,7 @@ end
 
 """ Draw a circle in SVG format. """
 function draw_circle(c::NamedTuple)::String
+
     fill = lab_to_rgb_hex(c.color)
     stroke = Lab(c.color.l + (100 + c.color.l) * 0.12, c.color.a * (1 + 0.12), c.color.b * (1 + 0.12)) |> lab_to_rgb_hex
     """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.5" />"""
