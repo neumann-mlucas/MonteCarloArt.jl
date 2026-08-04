@@ -7,15 +7,6 @@ using ArgParse
 using Images
 using Logging
 
-""" Default configuration parameters. """
-const DefaultArgs = Dict{String,Any}((
-    "overlap-tolerance" => 0.25,
-    "color" => false,
-    "color-palette" => 64,
-    "steps" => 200000,
-    "svg" => false,
-))
-
 """ Main function: parse arguments, load image, run algorithm, and save output. """
 function main()
     args = parse_cmd()
@@ -25,8 +16,6 @@ function main()
         global_logger(ConsoleLogger(stderr, Logging.Debug))
     end
 
-    # Merge default parameters with command line arguments
-    args = merge(DefaultArgs, args)
     input_path, output_path = args["input"], args["output"]
 
     @info "Loading input image: '$input_path'"
@@ -76,9 +65,9 @@ function parse_cmd()
         action = :store_true
 
         "--color-palette"
-        help = "Number of colors in the palette (default: 64)"
+        help = "Number of colors in the palette"
         arg_type = Int
-        default = 32
+        default = 64
 
         "--overlap-tolerance", "-t"
         help = "Parameters that penalizes overlapping circles"

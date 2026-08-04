@@ -13,7 +13,7 @@ const Image = Matrix{Lab{Float64}}
 const DefaultArgs = Dict{String,Any}()
 const REL_RADIUS = 0.0032
 const REL_STD_RADIUS = 0.4
-const MIN_RADIUS = 2.0
+const MIN_RADIUS = 2
 
 export load_color_image, load_image, run
 
@@ -44,7 +44,7 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     base_energy = args["overlap-tolerance"]
     steps = args["steps"]
 
-    Temp = base_energy * 2
+    T0 = base_energy * 2
     accept, mc_accept, misses = 0, 0, 0
 
     for step in 1:steps
@@ -61,6 +61,9 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
         energy = mean(penalty[p] for p in points)
         draw_circle = false
 
+        # linear cool from T0 to ~0 across the run
+        Temp = max(T0 * (1 - step / steps), 1e-6)
+
         @debug "Applying Monte Carlo acceptance criteria"
         dE = energy - base_energy
         if dE < 0
@@ -75,7 +78,8 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
 
         @debug "Drawing circle: center $point radius $radius"
         if draw_circle
-            push!(circles, (center=point, radius=radius, color=color))
+            # cache points on the circle so PNG render doesn't recompute
+            push!(circles, (center=point, radius=radius, color=color, points=points))
             for i in points
                 penalty[i] = 1
             end
@@ -87,17 +91,18 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     @info "  - mc_accept: $(lpad(mc_accept, 8)) [$(to_pct(mc_accept))%]"
     @info "  - misses:    $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
-    if args["svg"]
-        return render_svg(circles, h, w)
-    end
+    return args["svg"] ? render_svg(circles, h, w) : render_png(circles, h, w)
+end
 
+""" Render list of circles into a Lab image. """
+function render_png(circles::Vector{NamedTuple}, h::Int, w::Int)::Image
     out = fill(Lab{Float64}(0, 0, 0), h, w)
     for c in circles
-        for i in gen_circle_points((h, w), c.center, c.radius)
+        for i in c.points
             out[i] = c.color
         end
     end
-    return out
+    out
 end
 
 """ Cluster image colors into a palette using k-means. """
@@ -109,9 +114,9 @@ end
 
 """ Get a random radius with some randomness based on image size. """
 @inline function get_radius(height::Int, width::Int)::Int
-    radius = min(height, width) * REL_RADIUS
-    std = radius * REL_STD_RADIUS
-    floor(Int, abs(randn() * std + max(MIN_RADIUS, 1.2)))
+    mean_r = min(height, width) * REL_RADIUS
+    std = mean_r * REL_STD_RADIUS
+    max(MIN_RADIUS, floor(Int, abs(randn() * std + mean_r)))
 end
 
 """ Get a random center point inside the image. """
@@ -155,9 +160,11 @@ end
 
 """ Draw a circle in SVG format. """
 function draw_circle(c::NamedTuple)::String
-
     fill = lab_to_rgb_hex(c.color)
-    stroke = Lab(c.color.l + (100 + c.color.l) * 0.12, c.color.a * (1 + 0.12), c.color.b * (1 + 0.12)) |> lab_to_rgb_hex
+    # Darker outline in output: shift L up in complement-Lab space, keep a/b,
+    # clamp to gamut to avoid the out-of-range values the previous formula
+    # produced for lightness near 100.
+    stroke = lab_to_rgb_hex(Lab(min(c.color.l + 12, 100), c.color.a, c.color.b))
     """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.5" />"""
 end
 
