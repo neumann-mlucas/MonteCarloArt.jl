@@ -1,0 +1,4 @@
+in/
+out/
+test/outputs/
+*.log

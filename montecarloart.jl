@@ -14,6 +14,7 @@ const DefaultArgs = Dict{String,Any}()
 const REL_RADIUS = 0.0032
 const REL_STD_RADIUS = 0.4
 const MIN_RADIUS = 2
+const RMAX_REFRESH = 2000
 
 export load_color_image, load_image, run
 
@@ -41,15 +42,26 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     palette = get_palette(inp, args)
     @info "Finished generating color palette with $(args["color-palette"]) colors"
 
-    base_energy = args["overlap-tolerance"]
+    # importance-sampling state: residual[i] = ||inp[i] - current_canvas[i]||
+    # in Lab. Sampling proposed centers proportional to residual concentrates
+    # circles on under-approximated regions. Seed canvas as image mean so
+    # initial residual reflects local deviation, not raw luminance.
+    canvas_seed = mean_color(vec(inp))
+    residual    = color_distance.(inp, Ref(canvas_seed))
+    r_max       = maximum(residual)
+
+    base_tolerance = args["overlap-tolerance"]
     steps = args["steps"]
 
-    T0 = base_energy * 2
-    accept, mc_accept, misses = 0, 0, 0
+    accept, misses = 0, 0
 
     for step in 1:steps
         @debug "Step $step of $steps"
-        point = get_center(h, w)
+        if step % RMAX_REFRESH == 0
+            r_max = maximum(residual)
+        end
+
+        point = importance_center(residual, r_max)
         radius = get_radius(h, w)
         points = gen_circle_points((h, w), point, radius)
         pixels = getindex.(Ref(inp), points)
@@ -58,38 +70,23 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
         idx = argmin(color_distance(c, avg) for c in palette)
         color = palette[idx]
 
-        energy = mean(penalty[p] for p in points)
-        draw_circle = false
+        overlap = mean(penalty[p] for p in points)
 
-        # linear cool from T0 to ~0 across the run
-        Temp = max(T0 * (1 - step / steps), 1e-6)
-
-        @debug "Applying Monte Carlo acceptance criteria"
-        dE = energy - base_energy
-        if dE < 0
-            draw_circle = true
+        if overlap < base_tolerance
             accept += 1
-        elseif exp(-dE / Temp) > rand()
-            draw_circle = true
-            mc_accept += 1
+            push!(circles, (center=point, radius=radius, color=color, points=points))
+            @inbounds for i in points
+                penalty[i]  = 1
+                residual[i] = color_distance(inp[i], color)
+            end
         else
             misses += 1
-        end
-
-        @debug "Drawing circle: center $point radius $radius"
-        if draw_circle
-            # cache points on the circle so PNG render doesn't recompute
-            push!(circles, (center=point, radius=radius, color=color, points=points))
-            for i in points
-                penalty[i] = 1
-            end
         end
     end
     to_pct(x) = lpad(round(Int, 100 * x / steps), 3)
     @info "Finished algorithm steps with $(length(circles)) circles to drawn"
-    @info "  - accept:    $(lpad(accept, 8)) [$(to_pct(accept))%]"
-    @info "  - mc_accept: $(lpad(mc_accept, 8)) [$(to_pct(mc_accept))%]"
-    @info "  - misses:    $(lpad(misses, 8)) [$(to_pct(misses))%]"
+    @info "  - accept:  $(lpad(accept, 8)) [$(to_pct(accept))%]"
+    @info "  - misses:  $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
     return args["svg"] ? render_svg(circles, h, w) : render_png(circles, h, w)
 end
@@ -119,9 +116,17 @@ end
     max(MIN_RADIUS, floor(Int, abs(randn() * std + mean_r)))
 end
 
-""" Get a random center point inside the image. """
-@inline function get_center(height::Int, width::Int)::Tuple{Int,Int}
-    (rand(1:height), rand(1:width))
+""" Sample a center via rejection, biased toward high-residual pixels. """
+@inline function importance_center(residual::Matrix{Float64}, r_max::Float64)::Tuple{Int,Int}
+    h, w = size(residual)
+    # degenerate case: residual collapsed to zero, fall back to uniform
+    r_max <= 0 && return (rand(1:h), rand(1:w))
+    while true
+        y, x = rand(1:h), rand(1:w)
+        @inbounds if rand() * r_max < residual[y, x]
+            return (y, x)
+        end
+    end
 end
 
 """ Generate points that form a filled circle of given radius. """

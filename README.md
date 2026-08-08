@@ -4,25 +4,16 @@
   <img src="examples/marcus_aurelius.svg" alt="Marcus Aurelius Bust" width="600px" />
 </p>
 
-MonteCarloArt.jl is a Julia script that recreates images in a pointillist style using a Monte Carlo-inspired algorithm. The process begins by extracting a reduced color palette of N colors from the original image. The script then attempts to place small, non-overlapping colored dots onto a blank canvas.
+MonteCarloArt.jl is a Julia script that recreates images in a pointillist style using a greedy Monte Carlo sampling algorithm. The process begins by extracting a reduced color palette of N colors from the original image. The script then attempts to place small, non-overlapping colored dots onto a blank canvas.
 
-Each dot is proposed at a random position and is only added to the canvas if the average overlap energy is below a fixed threshold (`overlap_tolerance_energy`), or if it passes a Monte Carlo acceptance check. The acceptance logic follows:
-
-$$
-\text{energy} = \frac{1}{N} \sum_{p \in \text{points}} \text{penalty}(p)
-$$
+At each step a dot is proposed at a random position (biased toward high-error regions via importance sampling on the residual map) and added to the canvas iff the average overlap under the dot is below a fixed threshold:
 
 $$
-\Delta E = \text{energy} - \text{overlap tolerance energy}
+\text{overlap} = \frac{1}{N} \sum_{p \in \text{points}} \text{penalty}(p)
 $$
 
 $$
-\text{Draw circle if} \quad
-\begin{cases}
-\Delta E < 0 & \text{(accept unconditionally)} \\
-\exp\left(-\frac{\Delta E}{T}\right) > \text{rand()} & \text{(accept with probability)} \\
-\text{otherwise reject}
-\end{cases}
+\text{Draw circle if} \quad \text{overlap} < \text{overlap-tolerance}
 $$
 
 The color of each dot is selected as the closest match from the palette to the original image’s color at the proposed position. Over time, this method produces an image with subtle color blending and visual texture, characteristic of pointillist art.
@@ -127,9 +118,15 @@ julia -O3 main.jl --color --steps 400000 --svg -i input.jpg -o output.png
 
 ### TODO
 
-- [ ] Add Threading
+- [ ] Add Threading (batch proposals with local conflict resolution)
 - [ ] Add more CLI parameters
 - [ ] Use the color distance / color intensity as a variable in the MC criteria
+      (color-aware acceptance: reject circles that reduce overlap but degrade
+      palette-to-target color match; needs multi-image benchmark to tune weights)
+- [ ] Radius schedule (broad strokes early, fine dots late)
+- [ ] Accumulating penalty instead of binary (track overlap depth)
+- [ ] Coverage-based stopping (halt when accept-rate over last N steps drops
+      below threshold)
 
 
 ---
