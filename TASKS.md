@@ -478,49 +478,14 @@ differs in RGB values but shape identity is preserved.
 
 ---
 
-## Task 8 — `--uniform-centers` flag (A/B against importance sampling)
+## Task 8 — `--uniform-centers` flag (killed)
 
-**Status**: not started. **Priority**: research — allows measuring the
-importance-sampling win vs the original uniform baseline.
-**Complexity**: trivial.
-
-### Motivation
-
-Today's refactor made importance sampling the only path. No way to
-measure how much it actually contributes vs the coverage schedule.
-
-### Alternatives
-
-**8a. Restore `get_center` uniformly, dispatch on flag.**
-
-```julia
-point = args["uniform-centers"] ?
-    (rand(1:h), rand(1:w)) :
-    importance_center(residual, r_max)
-```
-
-Pro: trivial. One flag, one branch.
-Con: preserves dead-ish code path.
-
-### Recommendation
-
-**8a**. Ship as a debug/benchmark flag. Prefix in help with `[debug]`
-so users know it's not the intended path.
-
-### API
-
-```
---uniform-centers       default off    # [debug] disable importance sampling
-```
-
-### Complexity
-
-Zero. One branch.
-
-### Test
-
-Assert: `--uniform-centers --seed 42` output is deterministic (same
-seed = same output).
+**Status**: killed 2026-08-10. Reason: low-value polish. Importance sampling
+is the only production path; adding a debug branch to A/B-measure it earns
+its keep only if someone actually runs the benchmark. No one plans to. The
+`r_max <= 0` fallback inside `importance_center` already covers the
+degenerate flat-residual case. If measurement infra ever ships (Task 0 bench
+harness), reconsider then.
 
 ---
 
@@ -781,7 +746,6 @@ test/
 | 5 threading    | M4, byte-identity (with fixed seed) | Any | Correctness > quality here        |
 | 6 alpha        | M2, subjective | Painterly, landscape           | Loss of edge sharpness            |
 | 7 cooling      | M1, M2       | Full corpus                      | Same as 1                         |
-| 8 uniform      | M1 baseline  | Full corpus                      | This IS the regression control    |
 | 9 palette      | M3           | Portraits, graphic               | Runtime cost                      |
 
 ### Minimum harness (Task 0)
@@ -853,5 +817,4 @@ Keeps the moving parts under 100 lines total across `bench.jl` +
 4. Task 9 (palette locality) — only if perceived color issues remain.
 5. Task 3 (accumulating penalty) — breaks CLI compatibility, do at a
    major version bump.
-6. Task 6 (alpha), Task 8 (uniform centers), Task 10 (progress) —
-   polish, any time.
+6. Task 6 (alpha), Task 10 (progress) — polish, any time.
