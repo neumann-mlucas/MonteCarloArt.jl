@@ -48,8 +48,9 @@ Run the script via the command line:
 ```bash
 $ julia main.jl --help
 usage: main.jl -i INPUT [-o OUTPUT] [-s STEPS] [--svg] [--color]
-               [--color-palette COLOR-PALLET] [-t OVERLAP-TOLERANCE]
-               [--verbose] [-h]
+               [--color-palette COLOR-PALETTE] [-t OVERLAP-TOLERANCE]
+               [--radius-start RADIUS-START] [--radius-end RADIUS-END]
+               [--stop-miss-rate STOP-MISS-RATE] [-h]
 
 optional arguments:
   -i, --input INPUT     Input image path (required)
@@ -60,16 +61,30 @@ optional arguments:
   --svg                 Save output as SVG instead of PNG
   --color               Enable color mode (use input colors instead of
                         grayscale)
-  --color-palette COLOR-PALLET
-                        Number of colors in the palette (default: 64)
-                        (type: Int64, default: 32)
+  --color-palette COLOR-PALETTE
+                        Number of colors in the palette
+                        (type: Int64, default: 64)
   -t, --overlap-tolerance OVERLAP-TOLERANCE
                         Parameters that penalizes overlapping circles
                         (type: Float64, default: 0.08)
-  --verbose             Enable verbose logging (debug level)
+  --radius-start RADIUS-START
+                        Multiplier on base radius at step 1 (broad
+                        strokes early). 1.0 = current fixed size.
+                        (type: Float64, default: 1.0)
+  --radius-end RADIUS-END
+                        Multiplier on base radius at final step (fine
+                        detail late). 1.0 = current fixed size.
+                        (type: Float64, default: 1.0)
+  --stop-miss-rate STOP-MISS-RATE
+                        Early stop when EMA of miss rate exceeds this.
+                        1.0 = disabled (never stop early).
+                        (type: Float64, default: 1.0)
   -h, --help            show this help message and exit
 
 ```
+
+Threading is auto-derived from Julia's thread count — run with `-t N`
+to parallelize candidate proposals. Debug logging: `JULIA_DEBUG=MonteCarloArt`.
 
 
 - **Gray Scale Mode:**
@@ -118,15 +133,10 @@ julia -O3 main.jl --color --steps 400000 --svg -i input.jpg -o output.png
 
 ### TODO
 
-- [ ] Add Threading (batch proposals with local conflict resolution)
-- [ ] Add more CLI parameters
-- [ ] Use the color distance / color intensity as a variable in the MC criteria
-      (color-aware acceptance: reject circles that reduce overlap but degrade
-      palette-to-target color match; needs multi-image benchmark to tune weights)
-- [ ] Radius schedule (broad strokes early, fine dots late)
-- [ ] Accumulating penalty instead of binary (track overlap depth)
-- [ ] Coverage-based stopping (halt when accept-rate over last N steps drops
-      below threshold)
+See `TASKS.md` for the current backlog. Shipped: importance-sampling,
+radius schedule, threaded batch propose+commit, EMA coverage stop.
+Open: alpha-blend (Seurat mixing), palette locality (tile k-means),
+accumulating penalty (major-version CLI break), progress reporting.
 
 
 ---

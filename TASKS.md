@@ -325,8 +325,11 @@ metric to the debug log.
 
 ```
 --stop-miss-rate RATE   default 1.0    # 1.0 = never stop early, 0.95 = typical
---min-steps N           default 10000  # don't stop before this many steps
 ```
+
+`--min-steps` was dropped 2026-08-10 in favor of a hardcoded 500-step
+warmup (EMA α=0.99 converges in ~500 iters; the flag was only there to
+prevent pathological early stops and never got tuned in practice).
 
 ### Complexity
 
@@ -399,10 +402,10 @@ stale ones.
 
 ### API
 
-```
---threads N             default = Threads.nthreads()
---batch-size K          default = 8    # candidates per batch
-```
+No flags. Batch size auto-derived from `Threads.nthreads()`; run Julia
+with `-t N`. Rationale (2026-08-10): only sane batch value is
+`nthreads()` (larger = uneven finish; smaller = underutilized). A
+separate `--batch-size` knob was tried and dropped as unnecessary.
 
 ### Complexity
 
@@ -412,8 +415,9 @@ from stale-state rejects).
 
 ### Test
 
-Assert: threaded run with `--seed 42 --threads 1 --batch-size 1`
-produces byte-identical output to non-threaded run with `--seed 42`.
+Byte-identity across thread counts is impossible (task-local RNG state
+depends on scheduling); test at `-t 1` for the reference path and
+compare quality metrics (RMSE, accept-rate) at higher thread counts.
 
 ---
 
@@ -768,8 +772,8 @@ Everything else is over-engineering until it isn't.
   centroids drifts across Julia point releases. Test metrics, not bits.
 - **Threading correctness by comparing full runs across thread counts.**
   Same reason: fine-grained scheduling changes commit order for `5a`.
-  Test at `--batch-size 1 --threads 1` for byte-equality; test at
-  higher settings for quality-not-worse.
+  Test at `-t 1` for the reference path; test at higher `-t` for
+  quality-not-worse.
 - **Every parameter combination.** The 72-run grid is a *research*
   sweep, not a regression suite. Regression = 13 images × 2 configs.
 

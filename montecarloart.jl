@@ -54,9 +54,11 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     steps          = args["steps"]
     r0             = args["radius-start"]
     r1             = args["radius-end"]
-    batch_size     = max(1, args["batch-size"])
     stop_miss_rate = args["stop-miss-rate"]
-    min_steps      = args["min-steps"]
+    batch_size     = Threads.nthreads()
+    # EMA(α=0.99) needs ~500 steps to converge; guard against pathological
+    # early stops on tiny --steps budgets. Hardcoded — no user knob.
+    min_steps      = 500
 
     accept, misses = 0, 0
     ema_miss  = 0.0

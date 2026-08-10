@@ -5,17 +5,11 @@ include("montecarloart.jl")
 using .MonteCarloArt
 using ArgParse
 using Images
-using Logging
 
-""" Main function: parse arguments, load image, run algorithm, and save output. """
+""" Main function: parse arguments, load image, run algorithm, and save output.
+    Debug output: JULIA_DEBUG=MonteCarloArt,MonteCarloArtMain. """
 function main()
     args = parse_cmd()
-
-    # Set debug logging level if verbose mode is enabled
-    if args["verbose"]
-        global_logger(ConsoleLogger(stderr, Logging.Debug))
-    end
-
     input_path, output_path = args["input"], args["output"]
 
     @info "Loading input image: '$input_path'"
@@ -84,24 +78,10 @@ function parse_cmd()
         arg_type = Float64
         default = 1.0
 
-        "--batch-size"
-        help = "Candidates proposed per batch (parallelized across threads). 1 = single-threaded reference path."
-        arg_type = Int
-        default = 1
-
         "--stop-miss-rate"
         help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
         arg_type = Float64
         default = 1.0
-
-        "--min-steps"
-        help = "Never stop early before this many steps (guards EMA warmup)."
-        arg_type = Int
-        default = 10000
-
-        "--verbose"
-        help = "Enable verbose logging (debug level)"
-        action = :store_true
     end
 
     parse_args(parser)
