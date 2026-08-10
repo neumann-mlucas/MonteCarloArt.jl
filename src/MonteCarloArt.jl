@@ -1,83 +1,91 @@
 module MonteCarloArt
 
-using Clustering: kmeans
-using Images
-using Printf
-using Statistics
+include("common.jl")
 
 const Image = Matrix{Lab{Float64}}
+const Circle = @NamedTuple{
+    center::Tuple{Int,Int},
+    radius::Int,
+    color::Lab{Float64},
+    points::Vector{CartesianIndex{2}},
+}
+
 const REL_RADIUS = 0.0032
 const REL_STD_RADIUS = 0.4
 const MIN_RADIUS = 2
 const RMAX_REFRESH = 2000
+# EMA(α=0.99) needs ~500 steps to converge; guard against pathological
+# early stops on tiny --steps budgets. Hardcoded — no user knob.
+const MIN_STEPS_FOR_EMA_STOP = 500
 
-export load_color_image, load_image, run
+Base.@kwdef struct Config
+    steps::Int = 200000
+    color_palette::Int = 64
+    overlap_tolerance::Float64 = 0.08
+    radius_start::Float64 = 1.0
+    radius_end::Float64 = 1.0
+    stop_miss_rate::Float64 = 1.0
+    format::Symbol = :png
+end
+
+export Config
+export load_color_image, load_image, render
 
 """ Load a grayscale version of the image and convert to Lab color space. """
-function load_image(image_path::String)::Image
-    @assert isfile(image_path) "Image file not found: $image_path"
-    img = Images.load(image_path)
-    gray_img = complement.(Gray.(img))
-    convert.(Lab{Float64}, gray_img)
+function load_image(path::String)::Image
+    @assert isfile(path) "Image file not found: $path"
+    img = Images.load(path)
+    convert.(Lab{Float64}, complement.(Gray.(img)))
 end
 
 """ Load a color image and convert to Lab color space. """
-function load_color_image(image_path::String)::Image
-    @assert isfile(image_path) "Image file not found: $image_path"
-    img = Images.load(image_path)
+function load_color_image(path::String)::Image
+    @assert isfile(path) "Image file not found: $path"
+    img = Images.load(path)
     convert.(Lab{Float64}, complement.(img))
 end
 
-""" Main Monte Carlo Art algorithm. """
-function run(inp::Image, args::Dict{String,Any})::Union{Image,String}
+""" Main Monte Carlo Art algorithm. Returns Lab image (:png) or SVG string (:svg). """
+function render(inp::Image, cfg::Config)::Union{Image,String}
     h, w = size(inp)
     penalty = zeros(Float64, h, w)
-    circles = NamedTuple[]
+    circles = Circle[]
 
-    palette = get_palette(inp, args)
-    @info "Finished generating color palette with $(args["color-palette"]) colors"
+    palette = kmeans_palette_lab(inp, cfg.color_palette)
+    @info "Finished generating color palette with $(cfg.color_palette) colors"
 
     # importance-sampling state: residual[i] = ||inp[i] - current_canvas[i]||
     # in Lab. Sampling proposed centers proportional to residual concentrates
     # circles on under-approximated regions. Seed canvas as image mean so
     # initial residual reflects local deviation, not raw luminance.
     canvas_seed = mean_color(vec(inp))
-    residual    = color_distance.(inp, Ref(canvas_seed))
-    r_max       = maximum(residual)
+    residual = color_distance.(inp, Ref(canvas_seed))
+    r_max    = maximum(residual)
 
-    base_tolerance = args["overlap-tolerance"]
-    steps          = args["steps"]
-    r0             = args["radius-start"]
-    r1             = args["radius-end"]
-    stop_miss_rate = args["stop-miss-rate"]
-    batch_size     = Threads.nthreads()
-    # EMA(α=0.99) needs ~500 steps to converge; guard against pathological
-    # early stops on tiny --steps budgets. Hardcoded — no user knob.
-    min_steps      = 500
-
+    batch_size = Threads.nthreads()
     accept, misses = 0, 0
     ema_miss  = 0.0
     next_rmax = RMAX_REFRESH
     step      = 0
 
-    while step < steps
-        n_batch = min(batch_size, steps - step)
+    while step < cfg.steps
+        n_batch = min(batch_size, cfg.steps - step)
         if step >= next_rmax
             r_max = maximum(residual)
             next_rmax += RMAX_REFRESH
         end
 
-        candidates = Vector{NamedTuple}(undef, n_batch)
+        candidates = Vector{Circle}(undef, n_batch)
         Threads.@threads for k in 1:n_batch
-            candidates[k] = _propose(inp, residual, r_max, palette,
-                                     h, w, step + k, steps, r0, r1)
+            candidates[k] = propose(inp, residual, r_max, palette,
+                                    h, w, step + k, cfg)
         end
 
         # sequential commit: re-check overlap against updated penalty so
         # late candidates in the batch see prior commits' effects
         for cand in candidates
             overlap = mean(penalty[p] for p in cand.points)
-            miss = overlap >= base_tolerance
+            miss = overlap >= cfg.overlap_tolerance
             if !miss
                 accept += 1
                 push!(circles, cand)
@@ -93,26 +101,27 @@ function run(inp::Image, args::Dict{String,Any})::Union{Image,String}
 
         step += n_batch
 
-        if step >= min_steps && ema_miss > stop_miss_rate
-            @info "Early stop at step $step of $steps (ema_miss=$(round(ema_miss, digits=3)) > $stop_miss_rate)"
+        if step >= MIN_STEPS_FOR_EMA_STOP && ema_miss > cfg.stop_miss_rate
+            @info "Early stop at step $step of $(cfg.steps) (ema_miss=$(round(ema_miss, digits=3)) > $(cfg.stop_miss_rate))"
             break
         end
     end
+
     to_pct(x) = lpad(round(Int, 100 * x / max(step, 1)), 3)
-    @info "Finished algorithm steps ($step of $steps) with $(length(circles)) circles drawn"
+    @info "Finished algorithm steps ($step of $(cfg.steps)) with $(length(circles)) circles drawn"
     @info "  - accept:  $(lpad(accept, 8)) [$(to_pct(accept))%]"
     @info "  - misses:  $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
-    return args["svg"] ? render_svg(circles, h, w) : render_png(circles, h, w)
+    return cfg.format == :svg ? render_svg(circles, h, w) : render_png(circles, h, w)
 end
 
 """ Propose one circle candidate. Reads residual/penalty as a snapshot;
     safe to call in parallel across threads with shared read-only inputs. """
-@inline function _propose(inp::Image, residual::Matrix{Float64}, r_max::Float64,
-                          palette::Vector{Lab{Float64}}, h::Int, w::Int,
-                          step::Int, steps::Int, r0::Float64, r1::Float64)::NamedTuple
+@inline function propose(inp::Image, residual::Matrix{Float64}, r_max::Float64,
+                         palette::Vector{Lab{Float64}}, h::Int, w::Int,
+                         step::Int, cfg::Config)::Circle
     point  = importance_center(residual, r_max)
-    radius = get_radius(h, w, step, steps, r0, r1)
+    radius = get_radius(h, w, step, cfg.steps, cfg.radius_start, cfg.radius_end)
     points = gen_circle_points((h, w), point, radius)
     pixels = getindex.(Ref(inp), points)
     avg    = mean_color(pixels)
@@ -121,21 +130,12 @@ end
 end
 
 """ Render list of circles into a Lab image. """
-function render_png(circles::Vector{NamedTuple}, h::Int, w::Int)::Image
+function render_png(circles::Vector{Circle}, h::Int, w::Int)::Image
     out = fill(Lab{Float64}(0, 0, 0), h, w)
-    for c in circles
-        for i in c.points
-            out[i] = c.color
-        end
+    for c in circles, i in c.points
+        out[i] = c.color
     end
     out
-end
-
-""" Cluster image colors into a palette using k-means. """
-@inline function get_palette(img::Image, args::Dict{String,Any})::Vector{Lab{Float64}}
-    pixels = reshape(collect(channelview(img)), 3, :)
-    result = kmeans(pixels, args["color-palette"], maxiter=100, display=:none)
-    [Lab{Float64}(c...) for c in eachcol(result.centers)]
 end
 
 """ Get a random radius with some randomness based on image size and step.
@@ -172,45 +172,23 @@ end
     ]
 end
 
-""" Calculate Euclidean distance between two Lab colors. """
-@inline function color_distance(c1::Lab, c2::Lab)::Float64
-    sqrt((c1.l - c2.l)^2 + (c1.a - c2.a)^2 + (c1.b - c2.b)^2)
-end
-
-""" Calculate the mean Lab color from a list of Lab pixels. """
-@inline function mean_color(pixels::Vector{Lab{Float64}})::Lab{Float64}
-    Lab{Float64}(
-        mean(c.l for c in pixels),
-        mean(c.a for c in pixels),
-        mean(c.b for c in pixels)
-    )
-end
-
 """ Render list of circles into SVG content. """
-function render_svg(circles::Vector{NamedTuple}, height::Int, width::Int)::String
-    header = """
-    <svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height" viewBox="0 0 $width $height">
-    """
+function render_svg(circles::Vector{Circle}, height::Int, width::Int)::String
     body = join([draw_circle(c) for c in circles], "\n")
-    footer = "</svg>"
-
-    return join([header, body, footer], "\n")
+    join([svg_open(width, height), body, SVG_CLOSE], "\n")
 end
+
+# Circles are stored in complement-Lab space (see load_*_image). SVG needs
+# display-space colors, so invert before hexifying.
+svg_color(c::Lab) = rgb_hex(complement(convert(RGB{N0f8}, c)))
 
 """ Draw a circle in SVG format. """
-function draw_circle(c::NamedTuple)::String
-    fill = lab_to_rgb_hex(c.color)
+function draw_circle(c::Circle)::String
+    fill = svg_color(c.color)
     # Darker outline in output: shift L up in complement-Lab space, keep a/b,
-    # clamp to gamut to avoid the out-of-range values the previous formula
-    # produced for lightness near 100.
-    stroke = lab_to_rgb_hex(Lab(min(c.color.l + 12, 100), c.color.a, c.color.b))
+    # clamp to gamut to avoid out-of-range values.
+    stroke = svg_color(Lab(min(c.color.l + 12, 100), c.color.a, c.color.b))
     """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.5" />"""
-end
-
-""" Convert Lab color to RGB hex string. """
-function lab_to_rgb_hex(color::Lab{Float64})::String
-    rgb = complement(convert(Colors.RGB{N0f8}, color))
-    @sprintf("#%02X%02X%02X", round(Int, 255 * rgb.r), round(Int, 255 * rgb.g), round(Int, 255 * rgb.b))
 end
 
 end

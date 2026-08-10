@@ -6,6 +6,12 @@ test to leave behind.
 
 Priority ordered — earlier tasks compound off later ones.
 
+> **Path note.** Code lives under `src/MonteCarloArt.jl` with vendored
+> helpers in `src/common.jl`. CLI entry `main.jl` builds a
+> `MonteCarloArt.Config` and calls `MonteCarloArt.render` (was `.run`).
+> Output format now inferred from `-o` extension; `--svg` flag removed.
+> Circle type is `Circle = @NamedTuple{...}` — no more raw `NamedTuple[]`.
+
 Already shipped (for reference):
 - Importance-sampled centers (residual-weighted rejection) — 2026-08-09
 - Radius floor bug fix
@@ -123,7 +129,7 @@ produce output with lower total per-pixel `||target - render||` than
 without. Automate:
 
 ```
-julia -e 'include("montecarloart.jl"); using .MonteCarloArt, Images;
+julia --project=. -e 'include("src/MonteCarloArt.jl"); using .MonteCarloArt, Images;
   # run with and without, assert error_reduction > 5%'
 ```
 

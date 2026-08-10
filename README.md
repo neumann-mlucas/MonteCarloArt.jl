@@ -45,20 +45,22 @@ The following Julia packages are required:
 
 Run the script via the command line:
 
+Output format is inferred from the `-o` file extension (`.png` or `.svg`).
+
 ```bash
 $ julia main.jl --help
-usage: main.jl -i INPUT [-o OUTPUT] [-s STEPS] [--svg] [--color]
+usage: main.jl -i INPUT [-o OUTPUT] [--steps STEPS] [-v] [--color]
                [--color-palette COLOR-PALETTE] [-t OVERLAP-TOLERANCE]
                [--radius-start RADIUS-START] [--radius-end RADIUS-END]
                [--stop-miss-rate STOP-MISS-RATE] [-h]
 
 optional arguments:
   -i, --input INPUT     Input image path (required)
-  -o, --output OUTPUT   Output image path (without extension)
-                        (default: "output")
-  -s, --steps STEPS     Number of iterations (proportional to number
+  -o, --output OUTPUT   Output path with extension (.png/.svg);
+                        default "output.png"
+  --steps STEPS         Number of iterations (proportional to number
                         of circles) (type: Int64, default: 200000)
-  --svg                 Save output as SVG instead of PNG
+  -v, --verbose         verbose (debug) logging
   --color               Enable color mode (use input colors instead of
                         grayscale)
   --color-palette COLOR-PALETTE
@@ -120,17 +122,17 @@ julia -O3 -t 8 main.jl --color --steps 400000 \
 ```
 
 
-- **SVG Output:**
+- **SVG Output (extension picks the format):**
 ```bash
-julia -O3 -t 8 main.jl --steps 400000 --svg -i input.jpg -o output.png
+julia -O3 -t 8 main.jl --steps 400000 -i input.jpg -o output.svg
 ```
 
 
 - **Recommended Settings for Higher-resolution:**
 ```bash
-julia -O3 -t 8 main.jl --color --steps 400000 --svg \
+julia -O3 -t 8 main.jl --color --steps 400000 \
     --radius-start 3.0 --radius-end 0.3 --stop-miss-rate 0.95 \
-    -i input.jpg -o output.png
+    -i input.jpg -o output.svg
 ```
 
 

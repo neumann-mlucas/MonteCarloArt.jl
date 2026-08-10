@@ -1,31 +1,46 @@
 module MonteCarloArtMain
 
-include("montecarloart.jl")
+include("src/MonteCarloArt.jl")
 
 using .MonteCarloArt
 using ArgParse
+using FileIO
 using Images
 
 """ Main function: parse arguments, load image, run algorithm, and save output.
-    Debug output: JULIA_DEBUG=MonteCarloArt,MonteCarloArtMain. """
+    Debug output: --verbose or JULIA_DEBUG=MonteCarloArt,MonteCarloArtMain. """
 function main()
     args = parse_cmd()
-    input_path, output_path = args["input"], args["output"]
+    MonteCarloArt.setup_logging(args)
 
+    outputs = MonteCarloArt.resolve_output(args["output"])
+    length(outputs) == 1 || error("MonteCarloArt supports one output at a time (got $(length(outputs)))")
+    out_path, fmt = outputs[1]
+
+    cfg = MonteCarloArt.Config(
+        steps = args["steps"],
+        color_palette = args["color-palette"],
+        overlap_tolerance = args["overlap-tolerance"],
+        radius_start = args["radius-start"],
+        radius_end = args["radius-end"],
+        stop_miss_rate = args["stop-miss-rate"],
+        format = fmt,
+    )
+
+    input_path = args["input"]
     @info "Loading input image: '$input_path'"
     inp = args["color"] ? load_color_image(input_path) : load_image(input_path)
 
     @info "Running Monte Carlo algorithm"
-    out = MonteCarloArt.run(inp, args)
+    out = MonteCarloArt.render(inp, cfg)
 
-    @info "Saving output image to: '$(output_path).png'"
-    if args["svg"]
-        open(output_path * ".svg", "w") do f
-            write(f, out)
-        end
+    @info "Saving output to '$out_path' ($fmt)"
+    if fmt == :svg
+        MonteCarloArt.write_svg(out_path, out)
+    elseif fmt == :png
+        save(out_path, complement.(convert.(RGB{N0f8}, out)))
     else
-        out = complement.(convert.(RGB{N0f8}, out))
-        save(output_path * ".png", out)
+        error("Unsupported format for MonteCarloArt: $fmt")
     end
 
     @info "Processing completed"
@@ -34,56 +49,32 @@ end
 """ Parse command-line arguments using ArgParse. """
 function parse_cmd()
     parser = ArgParseSettings()
-    @add_arg_table parser begin
-        "--input", "-i"
-        help = "Input image path (required)"
-        arg_type = String
-        required = true
-
-        "--output", "-o"
-        help = "Output image path (without extension)"
-        arg_type = String
-        default = "output"
-
-        "--steps", "-s"
-        help = "Number of iterations (proportional to number of circles)"
-        arg_type = Int
-        default = 200000
-
-        "--svg"
-        help = "Save output as SVG instead of PNG"
-        action = :store_true
-
+    MonteCarloArt.add_common_args!(parser; steps_default=200000)
+    @add_arg_table! parser begin
         "--color"
-        help = "Enable color mode (use input colors instead of grayscale)"
-        action = :store_true
-
+            help = "Enable color mode (use input colors instead of grayscale)"
+            action = :store_true
         "--color-palette"
-        help = "Number of colors in the palette"
-        arg_type = Int
-        default = 64
-
+            help = "Number of colors in the palette"
+            arg_type = Int
+            default = 64
         "--overlap-tolerance", "-t"
-        help = "Parameters that penalizes overlapping circles"
-        arg_type = Float64
-        default = 0.08
-
+            help = "Parameters that penalizes overlapping circles"
+            arg_type = Float64
+            default = 0.08
         "--radius-start"
-        help = "Multiplier on base radius at step 1 (broad strokes early). 1.0 = current fixed size."
-        arg_type = Float64
-        default = 1.0
-
+            help = "Multiplier on base radius at step 1 (broad strokes early). 1.0 = current fixed size."
+            arg_type = Float64
+            default = 1.0
         "--radius-end"
-        help = "Multiplier on base radius at final step (fine detail late). 1.0 = current fixed size."
-        arg_type = Float64
-        default = 1.0
-
+            help = "Multiplier on base radius at final step (fine detail late). 1.0 = current fixed size."
+            arg_type = Float64
+            default = 1.0
         "--stop-miss-rate"
-        help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
-        arg_type = Float64
-        default = 1.0
+            help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
+            arg_type = Float64
+            default = 1.0
     end
-
     parse_args(parser)
 end
 
