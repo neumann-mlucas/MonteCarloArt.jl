@@ -1,16 +1,11 @@
 module MonteCarloArt
 
-using ArgParse
 using Clustering: kmeans
-using Dates
-using FileIO
 using Images
-using Logging
 using Printf
 using Statistics
 
 const Image = Matrix{Lab{Float64}}
-const DefaultArgs = Dict{String,Any}()
 const REL_RADIUS = 0.0032
 const REL_STD_RADIUS = 0.4
 const MIN_RADIUS = 2
@@ -34,7 +29,7 @@ function load_color_image(image_path::String)::Image
 end
 
 """ Main Monte Carlo Art algorithm. """
-function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
+function run(inp::Image, args::Dict{String,Any})::Union{Image,String}
     h, w = size(inp)
     penalty = zeros(Float64, h, w)
     circles = NamedTuple[]
@@ -73,16 +68,9 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
         end
 
         candidates = Vector{NamedTuple}(undef, n_batch)
-        if n_batch == 1 || Threads.nthreads() == 1
-            for k in 1:n_batch
-                candidates[k] = _propose(inp, residual, r_max, palette,
-                                         h, w, step + k, steps, r0, r1)
-            end
-        else
-            Threads.@threads for k in 1:n_batch
-                candidates[k] = _propose(inp, residual, r_max, palette,
-                                         h, w, step + k, steps, r0, r1)
-            end
+        Threads.@threads for k in 1:n_batch
+            candidates[k] = _propose(inp, residual, r_max, palette,
+                                     h, w, step + k, steps, r0, r1)
         end
 
         # sequential commit: re-check overlap against updated penalty so
@@ -176,11 +164,11 @@ end
 end
 
 """ Generate points that form a filled circle of given radius. """
-@inline function gen_circle_points(size::Tuple{Int,Int}, center::Tuple{Int,Int}, radius::Int)
+@inline function gen_circle_points(dims::Tuple{Int,Int}, center::Tuple{Int,Int}, radius::Int)
     CartesianIndex[
         CartesianIndex(center[1] + dx, center[2] + dy)
         for dx in -radius:radius, dy in -radius:radius
-        if dx^2 + dy^2 <= radius^2 && 1 <= center[1] + dx <= size[1] && 1 <= center[2] + dy <= size[2]
+        if dx^2 + dy^2 <= radius^2 && 1 <= center[1] + dx <= dims[1] && 1 <= center[2] + dy <= dims[2]
     ]
 end
 
