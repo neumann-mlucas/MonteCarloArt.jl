@@ -127,9 +127,12 @@ julia -e 'include("montecarloart.jl"); using .MonteCarloArt, Images;
 
 ## Task 2 — Radius schedule
 
-**Status**: not started. **Priority**: highest impact on aesthetic (broad
-strokes early, fine detail late — canonical pointillist behavior).
-**Complexity**: small (one function + two constants).
+**Status**: shipped 2026-08-09 (commit 44ba1e6). `get_radius` interpolates
+`r0*REL_RADIUS -> r1*REL_RADIUS` across steps; flags `--radius-start` /
+`--radius-end`, defaults 1.0/1.0 preserve prior behavior. **Priority**:
+highest impact on aesthetic (broad strokes early, fine detail late —
+canonical pointillist behavior). **Complexity**: small (one function + two
+constants).
 
 ### Motivation
 
@@ -275,8 +278,8 @@ Assert `maximum(penalty) == 1` at end.
 
 ## Task 4 — Coverage-based stop
 
-**Status**: not started. **Priority**: pure runtime win (~30% at
-300k-step configs).
+**Status**: in progress 2026-08-09 (bundled with Task 5). **Priority**: pure
+runtime win (~30% at 300k-step configs).
 **Complexity**: small (windowed counter + early break).
 
 ### Motivation
@@ -338,8 +341,9 @@ Assert: with `--stop-miss-rate 0.9`, run terminates before nominal
 
 ## Task 5 — Threading (deferred earlier)
 
-**Status**: not started. **Priority**: 4–8× on multicore.
-**Complexity**: medium (needs conflict resolution).
+**Status**: in progress 2026-08-09 (bundled with Task 4 — batched loop hosts
+both). **Priority**: 4–8× on multicore. **Complexity**: medium (needs
+conflict resolution).
 
 ### Motivation
 
@@ -841,14 +845,13 @@ Keeps the moving parts under 100 lines total across `bench.jl` +
 
 1. ~~Task 1 (color-aware acceptance)~~ — killed 2026-08-09, redundant with
    importance sampling.
-2. Task 2 (radius schedule) — biggest aesthetic win. **← current**
-3. Task 4 (coverage-based stop) — free 30% speedup.
-4. Cross-cutting benchmark harness — before task 5/9, need it to
-   validate.
-5. Task 5 (threading).
-6. Task 9 (palette locality) — only if tasks 1–2 don't already fix
-   perceived color issues.
-7. Task 3 (accumulating penalty) — breaks CLI compatibility, do at a
+2. ~~Task 2 (radius schedule)~~ — shipped 2026-08-09 (commit 44ba1e6).
+3. Task 4 (coverage-based stop) + Task 5 (threading) — bundled. Batched
+   loop hosts both: batch-propose parallelizes candidate generation;
+   sequential commit preserves determinism and drives EMA miss-rate stop.
+   **← current**
+4. Task 9 (palette locality) — only if perceived color issues remain.
+5. Task 3 (accumulating penalty) — breaks CLI compatibility, do at a
    major version bump.
-8. Task 6 (alpha), Task 8 (uniform centers), Task 10 (progress) —
+6. Task 6 (alpha), Task 8 (uniform centers), Task 10 (progress) —
    polish, any time.

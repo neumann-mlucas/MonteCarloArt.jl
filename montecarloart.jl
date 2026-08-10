@@ -51,46 +51,83 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
     r_max       = maximum(residual)
 
     base_tolerance = args["overlap-tolerance"]
-    steps = args["steps"]
-    r0 = args["radius-start"]
-    r1 = args["radius-end"]
+    steps          = args["steps"]
+    r0             = args["radius-start"]
+    r1             = args["radius-end"]
+    batch_size     = max(1, args["batch-size"])
+    stop_miss_rate = args["stop-miss-rate"]
+    min_steps      = args["min-steps"]
 
     accept, misses = 0, 0
+    ema_miss  = 0.0
+    next_rmax = RMAX_REFRESH
+    step      = 0
 
-    for step in 1:steps
-        @debug "Step $step of $steps"
-        if step % RMAX_REFRESH == 0
+    while step < steps
+        n_batch = min(batch_size, steps - step)
+        if step >= next_rmax
             r_max = maximum(residual)
+            next_rmax += RMAX_REFRESH
         end
 
-        point = importance_center(residual, r_max)
-        radius = get_radius(h, w, step, steps, r0, r1)
-        points = gen_circle_points((h, w), point, radius)
-        pixels = getindex.(Ref(inp), points)
-
-        avg = mean_color(pixels)
-        idx = argmin(color_distance(c, avg) for c in palette)
-        color = palette[idx]
-
-        overlap = mean(penalty[p] for p in points)
-
-        if overlap < base_tolerance
-            accept += 1
-            push!(circles, (center=point, radius=radius, color=color, points=points))
-            @inbounds for i in points
-                penalty[i]  = 1
-                residual[i] = color_distance(inp[i], color)
+        candidates = Vector{NamedTuple}(undef, n_batch)
+        if n_batch == 1 || Threads.nthreads() == 1
+            for k in 1:n_batch
+                candidates[k] = _propose(inp, residual, r_max, palette,
+                                         h, w, step + k, steps, r0, r1)
             end
         else
-            misses += 1
+            Threads.@threads for k in 1:n_batch
+                candidates[k] = _propose(inp, residual, r_max, palette,
+                                         h, w, step + k, steps, r0, r1)
+            end
+        end
+
+        # sequential commit: re-check overlap against updated penalty so
+        # late candidates in the batch see prior commits' effects
+        for cand in candidates
+            overlap = mean(penalty[p] for p in cand.points)
+            miss = overlap >= base_tolerance
+            if !miss
+                accept += 1
+                push!(circles, cand)
+                @inbounds for i in cand.points
+                    penalty[i]  = 1
+                    residual[i] = color_distance(inp[i], cand.color)
+                end
+            else
+                misses += 1
+            end
+            ema_miss = 0.99 * ema_miss + 0.01 * (miss ? 1.0 : 0.0)
+        end
+
+        step += n_batch
+
+        if step >= min_steps && ema_miss > stop_miss_rate
+            @info "Early stop at step $step of $steps (ema_miss=$(round(ema_miss, digits=3)) > $stop_miss_rate)"
+            break
         end
     end
-    to_pct(x) = lpad(round(Int, 100 * x / steps), 3)
-    @info "Finished algorithm steps with $(length(circles)) circles to drawn"
+    to_pct(x) = lpad(round(Int, 100 * x / max(step, 1)), 3)
+    @info "Finished algorithm steps ($step of $steps) with $(length(circles)) circles drawn"
     @info "  - accept:  $(lpad(accept, 8)) [$(to_pct(accept))%]"
     @info "  - misses:  $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
     return args["svg"] ? render_svg(circles, h, w) : render_png(circles, h, w)
+end
+
+""" Propose one circle candidate. Reads residual/penalty as a snapshot;
+    safe to call in parallel across threads with shared read-only inputs. """
+@inline function _propose(inp::Image, residual::Matrix{Float64}, r_max::Float64,
+                          palette::Vector{Lab{Float64}}, h::Int, w::Int,
+                          step::Int, steps::Int, r0::Float64, r1::Float64)::NamedTuple
+    point  = importance_center(residual, r_max)
+    radius = get_radius(h, w, step, steps, r0, r1)
+    points = gen_circle_points((h, w), point, radius)
+    pixels = getindex.(Ref(inp), points)
+    avg    = mean_color(pixels)
+    idx    = argmin(color_distance(c, avg) for c in palette)
+    (center=point, radius=radius, color=palette[idx], points=points)
 end
 
 """ Render list of circles into a Lab image. """
