@@ -52,6 +52,8 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
 
     base_tolerance = args["overlap-tolerance"]
     steps = args["steps"]
+    r0 = args["radius-start"]
+    r1 = args["radius-end"]
 
     accept, misses = 0, 0
 
@@ -62,7 +64,7 @@ function run(inp::Image, args::Dict=DefaultArgs)::Union{Image,String}
         end
 
         point = importance_center(residual, r_max)
-        radius = get_radius(h, w)
+        radius = get_radius(h, w, step, steps, r0, r1)
         points = gen_circle_points((h, w), point, radius)
         pixels = getindex.(Ref(inp), points)
 
@@ -109,9 +111,14 @@ end
     [Lab{Float64}(c...) for c in eachcol(result.centers)]
 end
 
-""" Get a random radius with some randomness based on image size. """
-@inline function get_radius(height::Int, width::Int)::Int
-    mean_r = min(height, width) * REL_RADIUS
+""" Get a random radius with some randomness based on image size and step.
+    Mean radius interpolates linearly from r0*REL_RADIUS at step 1 to
+    r1*REL_RADIUS at step `steps` — broad early strokes, fine late detail. """
+@inline function get_radius(height::Int, width::Int, step::Int, steps::Int,
+                            r0::Float64, r1::Float64)::Int
+    t = steps > 1 ? (step - 1) / (steps - 1) : 0.0
+    mult = r0 + (r1 - r0) * t
+    mean_r = min(height, width) * REL_RADIUS * mult
     std = mean_r * REL_STD_RADIUS
     max(MIN_RADIUS, floor(Int, abs(randn() * std + mean_r)))
 end

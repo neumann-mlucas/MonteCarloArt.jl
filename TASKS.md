@@ -18,7 +18,14 @@ Already shipped today (for reference):
 
 ## Task 1 — Color-aware acceptance
 
-**Status**: not started. **Priority**: highest impact on visual fidelity.
+**Status**: killed 2026-08-09 after full-corpus sweep + palette-16 A/B on
+girl_pearl/mona_lisa. Residual-delta gate (variant 1d) rejected ~2% more
+proposals; visual delta imperceptible. Cause: importance sampler already
+biases proposals to high-residual regions where the best palette pick
+almost always improves the canvas, so the color gate is nearly redundant
+with sampling. Evidence kept in `test/results/task1/` and
+`test/results/palette16/`; script kept in `test/scripts/task1.sh`.
+**Priority**: highest impact on visual fidelity.
 **Complexity**: small (single loop condition + one CLI flag + one weighting
 constant).
 
@@ -832,8 +839,9 @@ Keeps the moving parts under 100 lines total across `bench.jl` +
 
 ## Order of operations recommendation
 
-1. Task 1 (color-aware acceptance) — biggest fidelity win.
-2. Task 2 (radius schedule) — biggest aesthetic win.
+1. ~~Task 1 (color-aware acceptance)~~ — killed 2026-08-09, redundant with
+   importance sampling.
+2. Task 2 (radius schedule) — biggest aesthetic win. **← current**
 3. Task 4 (coverage-based stop) — free 30% speedup.
 4. Cross-cutting benchmark harness — before task 5/9, need it to
    validate.

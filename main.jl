@@ -74,6 +74,16 @@ function parse_cmd()
         arg_type = Float64
         default = 0.08
 
+        "--radius-start"
+        help = "Multiplier on base radius at step 1 (broad strokes early). 1.0 = current fixed size."
+        arg_type = Float64
+        default = 1.0
+
+        "--radius-end"
+        help = "Multiplier on base radius at final step (fine detail late). 1.0 = current fixed size."
+        arg_type = Float64
+        default = 1.0
+
         "--verbose"
         help = "Enable verbose logging (debug level)"
         action = :store_true
