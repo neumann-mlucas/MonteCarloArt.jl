@@ -28,6 +28,7 @@ dev/Manifest.toml
 test/results/
 
 # downloaded test fixtures (see test/fixtures/fetch.sh)
-test/*
+test/fixtures/*
+!test/fixtures/.gitkeep
 # !test/fixtures/fetch.sh
 # !test/fixtures/LICENSES.md
