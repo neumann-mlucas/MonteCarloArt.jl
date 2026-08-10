@@ -6,13 +6,17 @@ test to leave behind.
 
 Priority ordered — earlier tasks compound off later ones.
 
-Already shipped today (for reference):
-- Importance-sampled centers (residual-weighted rejection)
+Already shipped (for reference):
+- Importance-sampled centers (residual-weighted rejection) — 2026-08-09
 - Radius floor bug fix
 - Split `render_png` / `render_svg`
 - Cached circle points on the NamedTuple
 - SVG stroke gamut fix
-- Killed dead `DefaultArgs`, aligned `--color-palette` default
+- Aligned `--color-palette` default
+- Linear radius schedule (Task 2) — commit 44ba1e6, 2026-08-09
+- Batched propose + sequential commit (Task 5) — commit 0930230, 2026-08-09
+- EMA miss-rate early stop (Task 4) — commit 0930230, 2026-08-09
+- Flag cleanup: dropped `--min-steps`, `--batch-size`, `--verbose` — commit baeec05, 2026-08-10
 
 ---
 
@@ -278,8 +282,10 @@ Assert `maximum(penalty) == 1` at end.
 
 ## Task 4 — Coverage-based stop
 
-**Status**: in progress 2026-08-09 (bundled with Task 5). **Priority**: pure
-runtime win (~30% at 300k-step configs).
+**Status**: shipped 2026-08-09 (commit 0930230, bundled with Task 5).
+`--stop-miss-rate` gates an EMA of miss rate; hardcoded 500-step warmup.
+Verified on flowers.png: 100k budget → ~35k executed (65% wall saved).
+**Priority**: pure runtime win (~30% at 300k-step configs).
 **Complexity**: small (windowed counter + early break).
 
 ### Motivation
@@ -344,9 +350,12 @@ Assert: with `--stop-miss-rate 0.9`, run terminates before nominal
 
 ## Task 5 — Threading (deferred earlier)
 
-**Status**: in progress 2026-08-09 (bundled with Task 4 — batched loop hosts
-both). **Priority**: 4–8× on multicore. **Complexity**: medium (needs
-conflict resolution).
+**Status**: shipped 2026-08-09 (commit 0930230, bundled with Task 4).
+Batch size auto-derived from `Threads.nthreads()`; `@threads` around
+`_propose`, sequential commit filters stale candidates. Measured ~1.27×
+at bs=8 on flowers.png (Amdahl-bound by sequential commit + GC pressure
+on shared heap). **Priority**: 4–8× on multicore. **Complexity**: medium
+(needs conflict resolution).
 
 ### Motivation
 
@@ -721,23 +730,27 @@ per major task change; require statistical majority (~7/10) to accept.
 
 ### Directory layout
 
+Actual current layout (gitignored via `test/*`):
+
 ```
 test/
-    corpus/               # 13 fixed input PNGs + attribution.txt
-    configs/              # named parameter presets
-        baseline.json     # {"steps": 100000, "overlap-tolerance": 0.08, ...}
-        aggressive.json
-        pointillist.json
-    results/
-        baseline/         # canonical outputs from current-HEAD, checked in
-            <img>_<cfg>.png
-            <img>_<cfg>.metrics.json
-        candidate/        # per-branch, gitignored
+    fixtures/             # input images (aristotle, flowers, girl_pearl, ...)
+    results/              # per-task outputs, gitignored
+        baseline/         # from baseline.sh
+        task1/            # from task1.sh (color-aware A/B)
+        task2/            # from task2.sh (radius schedule A/B)
+        task45/           # from task45.sh (threading + early stop)
     scripts/
-        bench.jl          # runs corpus × configs, emits metrics
-        compare.jl        # diff two result dirs
-        pairwise.py       # optional: serve blind A/B for M6
+        baseline.sh       # canonical corpus × 2 configs
+        task1.sh          # per-task A/B run
+        task2.sh
+        task45.sh
 ```
+
+Aspirational bits not yet built: `bench.jl`, `compare.jl`, structured
+metrics JSON. Current harness emits CSV rows per run (image, config,
+seconds, circles, stopped_at). Enough for eyeballing; formal metrics
+land with Task 0 if needed.
 
 ### Test-strategy alignment per task
 
@@ -747,7 +760,7 @@ test/
 | 2 radius       | M2, M4       | Landscape, texture              | Sculptures may over-detail        |
 | 3 penalty      | M4 (depth)   | Graphic, ukiyo-e                | Semantic change — retune all      |
 | 4 coverage stop| M4 (runtime) | High-contrast photos            | Under-run on dense images         |
-| 5 threading    | M4, byte-identity (with fixed seed) | Any | Correctness > quality here        |
+| 5 threading    | M4, quality-not-worse across `-t` | Any   | Correctness > quality here        |
 | 6 alpha        | M2, subjective | Painterly, landscape           | Loss of edge sharpness            |
 | 7 cooling      | M1, M2       | Full corpus                      | Same as 1                         |
 | 9 palette      | M3           | Portraits, graphic               | Runtime cost                      |
@@ -814,11 +827,11 @@ Keeps the moving parts under 100 lines total across `bench.jl` +
 1. ~~Task 1 (color-aware acceptance)~~ — killed 2026-08-09, redundant with
    importance sampling.
 2. ~~Task 2 (radius schedule)~~ — shipped 2026-08-09 (commit 44ba1e6).
-3. Task 4 (coverage-based stop) + Task 5 (threading) — bundled. Batched
-   loop hosts both: batch-propose parallelizes candidate generation;
-   sequential commit preserves determinism and drives EMA miss-rate stop.
+3. ~~Task 4 (coverage-based stop) + Task 5 (threading)~~ — shipped
+   2026-08-09 (commit 0930230), simplified 2026-08-10 (commit baeec05).
+4. ~~Task 8 (uniform centers)~~ — killed 2026-08-10, low-value polish.
+5. Task 9 (palette locality) — only if perceived color issues remain.
    **← current**
-4. Task 9 (palette locality) — only if perceived color issues remain.
-5. Task 3 (accumulating penalty) — breaks CLI compatibility, do at a
+6. Task 3 (accumulating penalty) — breaks CLI compatibility, do at a
    major version bump.
-6. Task 6 (alpha), Task 10 (progress) — polish, any time.
+7. Task 6 (alpha), Task 10 (progress) — polish, any time.

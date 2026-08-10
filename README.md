@@ -4,9 +4,9 @@
   <img src="examples/marcus_aurelius.svg" alt="Marcus Aurelius Bust" width="600px" />
 </p>
 
-MonteCarloArt.jl is a Julia script that recreates images in a pointillist style using a greedy Monte Carlo sampling algorithm. The process begins by extracting a reduced color palette of N colors from the original image. The script then attempts to place small, non-overlapping colored dots onto a blank canvas.
+MonteCarloArt.jl is a Julia script that recreates images in a pointillist style using a greedy Monte Carlo sampling algorithm. The process begins by extracting a reduced color palette of N colors from the original image. The script then attempts to place small colored dots (sparse-overlap, not disjoint) onto a blank canvas.
 
-At each step a dot is proposed at a random position (biased toward high-error regions via importance sampling on the residual map) and added to the canvas iff the average overlap under the dot is below a fixed threshold:
+At each step a batch of dots is proposed in parallel — each at a random position biased toward high-error regions via importance sampling on the residual map. A dot is committed sequentially iff the average overlap under it is below a fixed threshold:
 
 $$
 \text{overlap} = \frac{1}{N} \sum_{p \in \text{points}} \text{penalty}(p)
@@ -20,12 +20,13 @@ The color of each dot is selected as the closest match from the palette to the o
 
 You can control several parameters to influence the output:
 
-1. **"--steps":** The number of algorithm steps (more steps = more dots in the canvas)
+1. **`--steps`:** upper bound on algorithm steps (more steps = more dots)
+2. **`--color-palette`:** number of colors in the palette
+3. **`--overlap-tolerance`:** base overlap tolerance (how closely dots can be placed)
+4. **`--radius-start` / `--radius-end`:** linear radius schedule multipliers on the base size (broad strokes early, fine detail late)
+5. **`--stop-miss-rate`:** EMA miss-rate threshold for early termination when the canvas saturates (1.0 = disabled)
 
-2. **"--color-palette":** number of colors in the palette
-
-3. **"--overlap-tolerance":** The base overlap tolerance (controls how closely dots can be placed)
-
+Parallelism is auto-derived from Julia's thread count (`julia -t N`). Debug logging: `JULIA_DEBUG=MonteCarloArt`.
 
 The script supports gray scale mode and can optionally export the output as an SVG (**if your computer can handle a huge SVG**). Higher-resolution input images generally produce better results.
 
@@ -38,7 +39,6 @@ The following Julia packages are required:
 - `Clustering`
 - `Colors`
 - `Images`
-- `Logging`
 
 
 ## Usage
@@ -93,7 +93,7 @@ julia -O3 main.jl -i input.jpg -o output.png
 ```
 
 
-- **Coler Mode with Custom Color Pallet:**
+- **Color Mode with Custom Color Palette:**
 ```bash
 julia -O3 main.jl --color --color-palette 64 -i input.jpg -o output.png
 ```
@@ -105,15 +105,32 @@ julia -O3 main.jl --steps 400000 -i input.jpg -o output.png
 ```
 
 
+- **Threaded + Radius Schedule (broad early, fine late):**
+```bash
+julia -O3 -t 8 main.jl --color --steps 400000 \
+    --radius-start 3.0 --radius-end 0.3 \
+    -i input.jpg -o output.png
+```
+
+
+- **Early Stop on Saturated Canvas (~30% wall-time savings):**
+```bash
+julia -O3 -t 8 main.jl --color --steps 400000 \
+    --stop-miss-rate 0.95 -i input.jpg -o output.png
+```
+
+
 - **SVG Output:**
 ```bash
 julia -O3 -t 8 main.jl --steps 400000 --svg -i input.jpg -o output.png
 ```
 
 
-- **Recommended Settings for better Higher-resolution:**
+- **Recommended Settings for Higher-resolution:**
 ```bash
-julia -O3 main.jl --color --steps 400000 --svg -i input.jpg -o output.png
+julia -O3 -t 8 main.jl --color --steps 400000 --svg \
+    --radius-start 3.0 --radius-end 0.3 --stop-miss-rate 0.95 \
+    -i input.jpg -o output.png
 ```
 
 
