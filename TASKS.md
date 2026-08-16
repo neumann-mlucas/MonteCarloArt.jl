@@ -22,7 +22,9 @@ Already shipped (for reference):
 - Linear radius schedule (Task 2) — commit 44ba1e6, 2026-08-09
 - Batched propose + sequential commit (Task 5) — commit 0930230, 2026-08-09
 - EMA miss-rate early stop (Task 4) — commit 0930230, 2026-08-09
-- Flag cleanup: dropped `--min-steps`, `--batch-size`, `--verbose` — commit baeec05, 2026-08-10
+- Flag cleanup: dropped `--min-steps`, `--batch-size` — commit baeec05, 2026-08-10. (`--verbose` retained; toggles Debug logging via `setup_logging` in `src/common.jl`.)
+- Alpha blend (Task 6) — 2026-08-15. `--alpha` flag; PNG blends per-channel in Lab; SVG uses fill-opacity. Default 1.0 preserves overwrite behavior.
+- Progress reporting (Task 10) — 2026-08-15. `@info` every 5% of `--steps` with circles + ema_miss.
 
 ---
 
@@ -220,7 +222,12 @@ late circles get accepted more often. Also visually eyeball a diff.
 
 ## Task 3 — Accumulating penalty
 
-**Status**: not started. **Priority**: unlocks depth semantics.
+**Status**: killed 2026-08-15. Semantic gain (depth signal) is real, but
+current fixed-threshold accept works fine after radius schedule + EMA stop.
+Costs a CLI break for a knob nobody has actually tuned in practice.
+Reconsider only if a concrete need surfaces (e.g. Task 6 alpha stacking
+wants a depth cap to prevent muddy over-blend).
+**Priority**: unlocks depth semantics.
 **Complexity**: one-liner change plus threshold reinterpretation.
 
 ### Motivation
@@ -510,7 +517,11 @@ harness), reconsider then.
 
 ## Task 9 — Palette locality
 
-**Status**: not started. **Priority**: medium visual quality.
+**Status**: killed 2026-08-15. Speculative — no concrete "muddy skin tone"
+report against the current importance-sampled + palette=64 output. YAGNI:
+revive only when a specific image demonstrates a palette-locality failure
+that widening `--color-palette` does not fix.
+**Priority**: medium visual quality.
 **Complexity**: medium (extra k-means pass or preprocessing).
 
 ### Motivation
@@ -836,8 +847,13 @@ Keeps the moving parts under 100 lines total across `bench.jl` +
 3. ~~Task 4 (coverage-based stop) + Task 5 (threading)~~ — shipped
    2026-08-09 (commit 0930230), simplified 2026-08-10 (commit baeec05).
 4. ~~Task 8 (uniform centers)~~ — killed 2026-08-10, low-value polish.
-5. Task 9 (palette locality) — only if perceived color issues remain.
-   **← current**
-6. Task 3 (accumulating penalty) — breaks CLI compatibility, do at a
-   major version bump.
-7. Task 6 (alpha), Task 10 (progress) — polish, any time.
+5. ~~Task 6 (alpha blend) + Task 10 (progress reporting)~~ — shipped
+   2026-08-15.
+6. ~~Task 9 (palette locality)~~ — killed 2026-08-15, speculative until a
+   real failure image surfaces.
+7. ~~Task 3 (accumulating penalty)~~ — killed 2026-08-15, CLI break with
+   no measured need.
+
+Backlog is currently empty. Next work waits on a concrete failure report
+(bad palette match, muddy blend, saturation edge case) or a new feature
+request. Do not open speculative tasks — YAGNI.

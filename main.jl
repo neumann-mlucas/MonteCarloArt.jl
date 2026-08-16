@@ -12,6 +12,7 @@ using Images
 function main()
     args = parse_cmd()
     MonteCarloArt.setup_logging(args)
+    validate_args(args)
 
     outputs = MonteCarloArt.resolve_output(args["output"])
     length(outputs) == 1 || error("MonteCarloArt supports one output at a time (got $(length(outputs)))")
@@ -24,6 +25,7 @@ function main()
         radius_start = args["radius-start"],
         radius_end = args["radius-end"],
         stop_miss_rate = args["stop-miss-rate"],
+        alpha = args["alpha"],
         format = fmt,
     )
 
@@ -44,6 +46,17 @@ function main()
     end
 
     @info "Processing completed"
+end
+
+""" Assert CLI args are in sane ranges. Trust boundary — fail loud, not silent NaN. """
+function validate_args(args::AbstractDict)
+    args["steps"] > 0                          || error("--steps must be > 0 (got $(args["steps"]))")
+    args["color-palette"] > 0                  || error("--color-palette must be > 0 (got $(args["color-palette"]))")
+    0.0 < args["alpha"] <= 1.0                 || error("--alpha must be in (0, 1] (got $(args["alpha"]))")
+    args["radius-start"] > 0                   || error("--radius-start must be > 0 (got $(args["radius-start"]))")
+    args["radius-end"] > 0                     || error("--radius-end must be > 0 (got $(args["radius-end"]))")
+    0.0 <= args["overlap-tolerance"] <= 1.0    || error("--overlap-tolerance must be in [0, 1] (got $(args["overlap-tolerance"]))")
+    0.0 < args["stop-miss-rate"] <= 1.0        || error("--stop-miss-rate must be in (0, 1] (got $(args["stop-miss-rate"]))")
 end
 
 """ Parse command-line arguments using ArgParse. """
@@ -72,6 +85,10 @@ function parse_cmd()
             default = 1.0
         "--stop-miss-rate"
             help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
+            arg_type = Float64
+            default = 1.0
+        "--alpha"
+            help = "Blend factor for stacked circles (1.0 = overwrite, 0.7 = Seurat-style optical mixing). PNG blends per-channel in Lab; SVG uses fill-opacity."
             arg_type = Float64
             default = 1.0
     end

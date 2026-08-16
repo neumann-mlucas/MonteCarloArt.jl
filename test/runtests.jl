@@ -5,10 +5,7 @@ using .MonteCarloArt
 
 @testset "MonteCarloArt smoke" begin
     fixture = joinpath(@__DIR__, "fixtures", "moon.jpg")
-    if !isfile(fixture)
-        @info "skipping — no test/fixtures/moon.jpg"
-        return
-    end
+    @test isfile(fixture)  # fail loud if fixture missing, not silent skip
     inp = MonteCarloArt.load_image(fixture)
     cfg = MonteCarloArt.Config(steps=200, color_palette=8, format=:png)
     out = MonteCarloArt.render(inp, cfg)

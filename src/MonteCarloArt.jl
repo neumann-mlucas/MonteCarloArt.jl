@@ -25,6 +25,7 @@ Base.@kwdef struct Config
     radius_start::Float64 = 1.0
     radius_end::Float64 = 1.0
     stop_miss_rate::Float64 = 1.0
+    alpha::Float64 = 1.0
     format::Symbol = :png
 end
 
@@ -67,6 +68,8 @@ function render(inp::Image, cfg::Config)::Union{Image,String}
     ema_miss  = 0.0
     next_rmax = RMAX_REFRESH
     step      = 0
+    progress_stride = max(1, cfg.steps ÷ 20)
+    next_progress   = progress_stride
 
     while step < cfg.steps
         n_batch = min(batch_size, cfg.steps - step)
@@ -101,6 +104,12 @@ function render(inp::Image, cfg::Config)::Union{Image,String}
 
         step += n_batch
 
+        if step >= next_progress
+            pct = lpad(round(Int, 100 * step / cfg.steps), 3)
+            @info "progress: $pct% ($step/$(cfg.steps))  circles=$(length(circles))  ema_miss=$(round(ema_miss, digits=3))"
+            next_progress += progress_stride
+        end
+
         if step >= MIN_STEPS_FOR_EMA_STOP && ema_miss > cfg.stop_miss_rate
             @info "Early stop at step $step of $(cfg.steps) (ema_miss=$(round(ema_miss, digits=3)) > $(cfg.stop_miss_rate))"
             break
@@ -112,7 +121,7 @@ function render(inp::Image, cfg::Config)::Union{Image,String}
     @info "  - accept:  $(lpad(accept, 8)) [$(to_pct(accept))%]"
     @info "  - misses:  $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
-    return cfg.format == :svg ? render_svg(circles, h, w) : render_png(circles, h, w)
+    return cfg.format == :svg ? render_svg(circles, h, w, cfg.alpha) : render_png(circles, h, w, cfg.alpha)
 end
 
 """ Propose one circle candidate. Reads residual/penalty as a snapshot;
@@ -129,11 +138,22 @@ end
     (center=point, radius=radius, color=palette[idx], points=points)
 end
 
-""" Render list of circles into a Lab image. """
-function render_png(circles::Vector{Circle}, h::Int, w::Int)::Image
+""" Render list of circles into a Lab image. alpha=1.0 overwrites (Seurat off);
+    alpha<1.0 blends new color into canvas per-channel (optical mixing). """
+function render_png(circles::Vector{Circle}, h::Int, w::Int, alpha::Float64=1.0)::Image
     out = fill(Lab{Float64}(0, 0, 0), h, w)
-    for c in circles, i in c.points
-        out[i] = c.color
+    if alpha >= 1.0
+        for c in circles, i in c.points
+            out[i] = c.color
+        end
+    else
+        a, b = alpha, 1.0 - alpha
+        for c in circles, i in c.points
+            p = out[i]; q = c.color
+            out[i] = Lab{Float64}(a * q.l + b * p.l,
+                                  a * q.a + b * p.a,
+                                  a * q.b + b * p.b)
+        end
     end
     out
 end
@@ -164,18 +184,24 @@ end
 end
 
 """ Generate points that form a filled circle of given radius. """
-@inline function gen_circle_points(dims::Tuple{Int,Int}, center::Tuple{Int,Int}, radius::Int)
-    CartesianIndex[
+@inline function gen_circle_points(dims::Tuple{Int,Int}, center::Tuple{Int,Int}, radius::Int)::Vector{CartesianIndex{2}}
+    CartesianIndex{2}[
         CartesianIndex(center[1] + dx, center[2] + dy)
         for dx in -radius:radius, dy in -radius:radius
         if dx^2 + dy^2 <= radius^2 && 1 <= center[1] + dx <= dims[1] && 1 <= center[2] + dy <= dims[2]
     ]
 end
 
-""" Render list of circles into SVG content. """
-function render_svg(circles::Vector{Circle}, height::Int, width::Int)::String
-    body = join([draw_circle(c) for c in circles], "\n")
-    join([svg_open(width, height), body, SVG_CLOSE], "\n")
+""" Render list of circles into SVG content. Stream to IOBuffer to avoid
+    materializing N per-circle Strings before concatenation. """
+function render_svg(circles::Vector{Circle}, height::Int, width::Int, alpha::Float64=1.0)::String
+    io = IOBuffer()
+    println(io, svg_open(width, height))
+    for c in circles
+        println(io, draw_circle(c, alpha))
+    end
+    print(io, SVG_CLOSE)
+    String(take!(io))
 end
 
 # Circles are stored in complement-Lab space (see load_*_image). SVG needs
@@ -183,12 +209,14 @@ end
 svg_color(c::Lab) = rgb_hex(complement(convert(RGB{N0f8}, c)))
 
 """ Draw a circle in SVG format. """
-function draw_circle(c::Circle)::String
+function draw_circle(c::Circle, alpha::Float64=1.0)::String
     fill = svg_color(c.color)
     # Darker outline in output: shift L up in complement-Lab space, keep a/b,
     # clamp to gamut to avoid out-of-range values.
     stroke = svg_color(Lab(min(c.color.l + 12, 100), c.color.a, c.color.b))
-    """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.5" />"""
+    # Match stroke opacity to fill opacity, else outlines look hard over faded fill.
+    op = alpha >= 1.0 ? "" : " fill-opacity=\"$(round(alpha, digits=3))\" stroke-opacity=\"$(round(alpha, digits=3))\""
+    """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill"$op stroke="$stroke" stroke-width="0.5" />"""
 end
 
 end
