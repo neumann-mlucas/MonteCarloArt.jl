@@ -22,8 +22,6 @@ function main()
         steps = args["steps"],
         color_palette = args["color-palette"],
         overlap_tolerance = args["overlap-tolerance"],
-        radius_start = args["radius-start"],
-        radius_end = args["radius-end"],
         stop_miss_rate = args["stop-miss-rate"],
         alpha = args["alpha"],
         format = fmt,
@@ -39,6 +37,8 @@ function main()
     @info "Saving output to '$out_path' ($fmt)"
     if fmt == :svg
         MonteCarloArt.write_svg(out_path, out)
+    elseif fmt == :gif
+        MonteCarloArt.save_gif(out_path, out)
     elseif fmt == :png
         save(out_path, complement.(convert.(RGB{N0f8}, out)))
     else
@@ -53,8 +53,6 @@ function validate_args(args::AbstractDict)
     args["steps"] > 0                          || error("--steps must be > 0 (got $(args["steps"]))")
     args["color-palette"] > 0                  || error("--color-palette must be > 0 (got $(args["color-palette"]))")
     0.0 < args["alpha"] <= 1.0                 || error("--alpha must be in (0, 1] (got $(args["alpha"]))")
-    args["radius-start"] > 0                   || error("--radius-start must be > 0 (got $(args["radius-start"]))")
-    args["radius-end"] > 0                     || error("--radius-end must be > 0 (got $(args["radius-end"]))")
     0.0 <= args["overlap-tolerance"] <= 1.0    || error("--overlap-tolerance must be in [0, 1] (got $(args["overlap-tolerance"]))")
     0.0 < args["stop-miss-rate"] <= 1.0        || error("--stop-miss-rate must be in (0, 1] (got $(args["stop-miss-rate"]))")
 end
@@ -75,18 +73,10 @@ function parse_cmd()
             help = "Parameters that penalizes overlapping circles"
             arg_type = Float64
             default = 0.08
-        "--radius-start"
-            help = "Multiplier on base radius at step 1 (broad strokes early). 1.0 = current fixed size."
-            arg_type = Float64
-            default = 1.0
-        "--radius-end"
-            help = "Multiplier on base radius at final step (fine detail late). 1.0 = current fixed size."
-            arg_type = Float64
-            default = 1.0
         "--stop-miss-rate"
             help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
             arg_type = Float64
-            default = 1.0
+            default = 0.99
         "--alpha"
             help = "Blend factor for stacked circles (1.0 = overwrite, 0.7 = Seurat-style optical mixing). PNG blends per-channel in Lab; SVG uses fill-opacity."
             arg_type = Float64

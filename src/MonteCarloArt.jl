@@ -17,20 +17,23 @@ const RMAX_REFRESH = 2000
 # EMA(α=0.99) needs ~500 steps to converge; guard against pathological
 # early stops on tiny --steps budgets. Hardcoded — no user knob.
 const MIN_STEPS_FOR_EMA_STOP = 500
+# GIF: snapshot every N committed circles. ~200-400 frames typical.
+const GIF_INTERVAL = 100
+const GIF_FPS = 15
+
+const GifFrames = Vector{Matrix{RGB{N0f8}}}
 
 Base.@kwdef struct Config
     steps::Int = 200000
     color_palette::Int = 64
     overlap_tolerance::Float64 = 0.08
-    radius_start::Float64 = 1.0
-    radius_end::Float64 = 1.0
     stop_miss_rate::Float64 = 1.0
     alpha::Float64 = 1.0
     format::Symbol = :png
 end
 
 export Config
-export load_color_image, load_image, render
+export load_color_image, load_image, render, save_gif
 
 """ Load a grayscale version of the image and convert to Lab color space. """
 function load_image(path::String)::Image
@@ -46,8 +49,8 @@ function load_color_image(path::String)::Image
     convert.(Lab{Float64}, complement.(img))
 end
 
-""" Main Monte Carlo Art algorithm. Returns Lab image (:png) or SVG string (:svg). """
-function render(inp::Image, cfg::Config)::Union{Image,String}
+""" Main Monte Carlo Art algorithm. Returns Lab image (:png), SVG string (:svg), or GIF frames (:gif). """
+function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
     h, w = size(inp)
     penalty = zeros(Float64, h, w)
     circles = Circle[]
@@ -121,7 +124,13 @@ function render(inp::Image, cfg::Config)::Union{Image,String}
     @info "  - accept:  $(lpad(accept, 8)) [$(to_pct(accept))%]"
     @info "  - misses:  $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
-    return cfg.format == :svg ? render_svg(circles, h, w, cfg.alpha) : render_png(circles, h, w, cfg.alpha)
+    if cfg.format == :svg
+        return render_svg(circles, h, w, cfg.alpha)
+    elseif cfg.format == :gif
+        return render_gif(circles, h, w, cfg.alpha)
+    else
+        return render_png(circles, h, w, cfg.alpha)
+    end
 end
 
 """ Propose one circle candidate. Reads residual/penalty as a snapshot;
@@ -130,7 +139,7 @@ end
                          palette::Vector{Lab{Float64}}, h::Int, w::Int,
                          step::Int, cfg::Config)::Circle
     point  = importance_center(residual, r_max)
-    radius = get_radius(h, w, step, cfg.steps, cfg.radius_start, cfg.radius_end)
+    radius = get_radius(h, w)
     points = gen_circle_points((h, w), point, radius)
     pixels = getindex.(Ref(inp), points)
     avg    = mean_color(pixels)
@@ -158,14 +167,9 @@ function render_png(circles::Vector{Circle}, h::Int, w::Int, alpha::Float64=1.0)
     out
 end
 
-""" Get a random radius with some randomness based on image size and step.
-    Mean radius interpolates linearly from r0*REL_RADIUS at step 1 to
-    r1*REL_RADIUS at step `steps` — broad early strokes, fine late detail. """
-@inline function get_radius(height::Int, width::Int, step::Int, steps::Int,
-                            r0::Float64, r1::Float64)::Int
-    t = steps > 1 ? (step - 1) / (steps - 1) : 0.0
-    mult = r0 + (r1 - r0) * t
-    mean_r = min(height, width) * REL_RADIUS * mult
+""" Sample a radius from a normal distribution scaled to image size. """
+@inline function get_radius(height::Int, width::Int)::Int
+    mean_r = min(height, width) * REL_RADIUS
     std = mean_r * REL_STD_RADIUS
     max(MIN_RADIUS, floor(Int, abs(randn() * std + mean_r)))
 end
@@ -207,6 +211,39 @@ end
 # Circles are stored in complement-Lab space (see load_*_image). SVG needs
 # display-space colors, so invert before hexifying.
 svg_color(c::Lab) = rgb_hex(complement(convert(RGB{N0f8}, c)))
+
+""" Replay committed circles onto a running canvas, snapshotting every
+    GIF_INTERVAL circles. Frames in display-space RGB{N0f8}. """
+function render_gif(circles::Vector{Circle}, h::Int, w::Int, alpha::Float64=1.0)::GifFrames
+    out = fill(Lab{Float64}(0, 0, 0), h, w)
+    frames = GifFrames()
+    a, b = alpha, 1.0 - alpha
+    for (n, c) in enumerate(circles)
+        if alpha >= 1.0
+            @inbounds for i in c.points
+                out[i] = c.color
+            end
+        else
+            @inbounds for i in c.points
+                p = out[i]; q = c.color
+                out[i] = Lab{Float64}(a * q.l + b * p.l,
+                                      a * q.a + b * p.a,
+                                      a * q.b + b * p.b)
+            end
+        end
+        if n % GIF_INTERVAL == 0 || n == length(circles)
+            push!(frames, complement.(convert.(RGB{N0f8}, out)))
+        end
+    end
+    @info "GIF: $(length(frames)) frames at $GIF_FPS fps ($(round(length(frames)/GIF_FPS, digits=1))s clip)"
+    frames
+end
+
+""" Write GIF frames as animated GIF. Mirrors StringArt.save_gif. """
+function save_gif(path::String, frames::GifFrames)
+    isempty(frames) && return
+    save(path, stack(frames; dims=3), fps=GIF_FPS)
+end
 
 """ Draw a circle in SVG format. """
 function draw_circle(c::Circle, alpha::Float64=1.0)::String

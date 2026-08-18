@@ -23,9 +23,10 @@ You can control several parameters to influence the output:
 1. **`--steps`:** upper bound on algorithm steps (more steps = more dots)
 2. **`--color-palette`:** number of colors in the palette
 3. **`--overlap-tolerance`:** base overlap tolerance (how closely dots can be placed)
-4. **`--radius-start` / `--radius-end`:** linear radius schedule multipliers on the base size (broad strokes early, fine detail late)
-5. **`--stop-miss-rate`:** EMA miss-rate threshold for early termination when the canvas saturates (1.0 = disabled)
-6. **`--alpha`:** blend factor for stacked circles (1.0 = overwrite, 0.7 ≈ Seurat-style optical mixing). PNG blends per-channel in Lab; SVG emits `fill-opacity`.
+4. **`--stop-miss-rate`:** EMA miss-rate threshold for early termination when the canvas saturates (default 0.99; 1.0 = disabled)
+5. **`--alpha`:** blend factor for stacked circles (1.0 = overwrite, 0.7 ≈ Seurat-style optical mixing). PNG blends per-channel in Lab; SVG emits `fill-opacity`.
+
+Circle radii are sampled from a normal distribution scaled to image size (no user knob).
 
 Parallelism is auto-derived from Julia's thread count (`julia -t N`). Progress logs fire every 5% of `--steps`. Debug logging: `JULIA_DEBUG=MonteCarloArt`.
 
@@ -52,13 +53,12 @@ Output format is inferred from the `-o` file extension (`.png` or `.svg`).
 $ julia main.jl --help
 usage: main.jl -i INPUT [-o OUTPUT] [--steps STEPS] [-v] [--color]
                [--color-palette COLOR-PALETTE] [-t OVERLAP-TOLERANCE]
-               [--radius-start RADIUS-START] [--radius-end RADIUS-END]
                [--stop-miss-rate STOP-MISS-RATE] [--alpha ALPHA] [-h]
 
 optional arguments:
   -i, --input INPUT     Input image path (required)
-  -o, --output OUTPUT   Output path with extension (.png/.svg);
-                        default "output.png"
+  -o, --output OUTPUT   Output path with extension (.png/.svg/.gif);
+                        default "output.svg"
   --steps STEPS         Number of iterations (proportional to number
                         of circles) (type: Int64, default: 200000)
   -v, --verbose         verbose (debug) logging
@@ -70,18 +70,10 @@ optional arguments:
   -t, --overlap-tolerance OVERLAP-TOLERANCE
                         Parameters that penalizes overlapping circles
                         (type: Float64, default: 0.08)
-  --radius-start RADIUS-START
-                        Multiplier on base radius at step 1 (broad
-                        strokes early). 1.0 = current fixed size.
-                        (type: Float64, default: 1.0)
-  --radius-end RADIUS-END
-                        Multiplier on base radius at final step (fine
-                        detail late). 1.0 = current fixed size.
-                        (type: Float64, default: 1.0)
   --stop-miss-rate STOP-MISS-RATE
                         Early stop when EMA of miss rate exceeds this.
                         1.0 = disabled (never stop early).
-                        (type: Float64, default: 1.0)
+                        (type: Float64, default: 0.99)
   --alpha ALPHA         Blend factor for stacked circles (1.0 =
                         overwrite, 0.7 = Seurat-style optical mixing).
                         (type: Float64, default: 1.0)
@@ -111,14 +103,6 @@ julia -O3 main.jl --steps 400000 -i input.jpg -o output.png
 ```
 
 
-- **Threaded + Radius Schedule (broad early, fine late):**
-```bash
-julia -O3 -t 8 main.jl --color --steps 400000 \
-    --radius-start 3.0 --radius-end 0.3 \
-    -i input.jpg -o output.png
-```
-
-
 - **Early Stop on Saturated Canvas (~30% wall-time savings):**
 ```bash
 julia -O3 -t 8 main.jl --color --steps 400000 \
@@ -132,6 +116,13 @@ julia -O3 -t 8 main.jl --steps 400000 -i input.jpg -o output.svg
 ```
 
 
+- **Animated GIF (replay of committed circles, snapshot every 100):**
+```bash
+julia -O3 -t 8 main.jl --color --steps 100000 -i input.jpg -o output.gif
+```
+Frames = `n_circles / 100`, playback = 15 fps. File size scales with input resolution × frame count — downsize input for smaller GIFs.
+
+
 - **Seurat-style Optical Mixing (alpha blend):**
 ```bash
 julia -O3 -t 8 main.jl --color --steps 400000 \
@@ -142,7 +133,7 @@ julia -O3 -t 8 main.jl --color --steps 400000 \
 - **Recommended Settings for Higher-resolution:**
 ```bash
 julia -O3 -t 8 main.jl --color --steps 400000 \
-    --radius-start 3.0 --radius-end 0.3 --stop-miss-rate 0.95 \
+    --stop-miss-rate 0.95 \
     -i input.jpg -o output.svg
 ```
 
@@ -163,10 +154,10 @@ julia -O3 -t 8 main.jl --color --steps 400000 \
 
 ### TODO
 
-See `TASKS.md`. Shipped: importance sampling, linear radius schedule,
-threaded batch propose+commit, EMA coverage stop, alpha blend (Seurat
-mixing), 5%-granularity progress logs. Backlog currently empty —
-palette locality, accumulating penalty, and color-aware acceptance were
+See `TASKS.md`. Shipped: importance sampling, threaded batch
+propose+commit, EMA coverage stop, alpha blend (Seurat mixing),
+5%-granularity progress logs. Backlog currently empty — palette
+locality, accumulating penalty, and color-aware acceptance were
 killed as speculative or redundant. New tasks wait on concrete failure
 reports.
 

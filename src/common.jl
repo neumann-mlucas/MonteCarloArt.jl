@@ -109,7 +109,7 @@ function add_common_args!(parser::ArgParseSettings; steps_default::Int=1000)
         "--output", "-o"
             help = "output path with extension (.png/.svg/.gif); comma-separate for multiple"
             arg_type = String
-            default = "output.png"
+            default = "output.svg"
         "--steps"
             help = "algorithm iteration count"
             arg_type = Int

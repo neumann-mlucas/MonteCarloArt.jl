@@ -19,7 +19,7 @@ Already shipped (for reference):
 - Cached circle points on the NamedTuple
 - SVG stroke gamut fix
 - Aligned `--color-palette` default
-- Linear radius schedule (Task 2) — commit 44ba1e6, 2026-08-09
+- Linear radius schedule (Task 2) — shipped 2026-08-09 (44ba1e6), REVERTED 2026-08-17. Radius now sampled from normal distribution around `REL_RADIUS` alone; `--radius-start`/`--radius-end` removed.
 - Batched propose + sequential commit (Task 5) — commit 0930230, 2026-08-09
 - EMA miss-rate early stop (Task 4) — commit 0930230, 2026-08-09
 - Flag cleanup: dropped `--min-steps`, `--batch-size` — commit baeec05, 2026-08-10. (`--verbose` retained; toggles Debug logging via `setup_logging` in `src/common.jl`.)
@@ -139,12 +139,12 @@ julia --project=. -e 'include("src/MonteCarloArt.jl"); using .MonteCarloArt, Ima
 
 ## Task 2 — Radius schedule
 
-**Status**: shipped 2026-08-09 (commit 44ba1e6). `get_radius` interpolates
-`r0*REL_RADIUS -> r1*REL_RADIUS` across steps; flags `--radius-start` /
-`--radius-end`, defaults 1.0/1.0 preserve prior behavior. **Priority**:
-highest impact on aesthetic (broad strokes early, fine detail late —
-canonical pointillist behavior). **Complexity**: small (one function + two
-constants).
+**Status**: REVERTED 2026-08-17. Shipped 2026-08-09 (commit 44ba1e6);
+user rejected the schedule — visual result deemed worse than fixed-mean
+sampling. `get_radius(h, w)` now draws from `N(REL_RADIUS*min(h,w),
+REL_STD_RADIUS*mean)` with no step-dependence; CLI flags dropped.
+Historical alternatives below kept as reference — do not re-ship without
+new evidence.
 
 ### Motivation
 
@@ -755,12 +755,10 @@ test/
     results/              # per-task outputs, gitignored
         baseline/         # from baseline.sh
         task1/            # from task1.sh (color-aware A/B)
-        task2/            # from task2.sh (radius schedule A/B)
         task45/           # from task45.sh (threading + early stop)
     scripts/
         baseline.sh       # canonical corpus × 2 configs
         task1.sh          # per-task A/B run
-        task2.sh
         task45.sh
 ```
 
