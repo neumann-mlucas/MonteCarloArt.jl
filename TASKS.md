@@ -23,8 +23,13 @@ Already shipped (for reference):
 - Batched propose + sequential commit (Task 5) — commit 0930230, 2026-08-09
 - EMA miss-rate early stop (Task 4) — commit 0930230, 2026-08-09
 - Flag cleanup: dropped `--min-steps`, `--batch-size` — commit baeec05, 2026-08-10. (`--verbose` retained; toggles Debug logging via `setup_logging` in `src/common.jl`.)
-- Alpha blend (Task 6) — 2026-08-15. `--alpha` flag; PNG blends per-channel in Lab; SVG uses fill-opacity. Default 1.0 preserves overwrite behavior.
+- Alpha blend (Task 6) — 2026-08-15, REMOVED 2026-08-18. `--alpha` flag never delivered value at overlap-tolerance=0.08 (near-zero overlap). Circles now always overwrite; simpler.
 - Progress reporting (Task 10) — 2026-08-15. `@info` every 5% of `--steps` with circles + ema_miss.
+- GIF output — 2026-08-17. `:gif` format via post-hoc replay, `save_gif` mirrors StringArt idiom.
+- Complement colorspace removal — 2026-08-18. `load_*_image` no longer complements before Lab conversion. Was cargo-culted from StringArt (where dark accumulates); circles overwrite so inversion added distortion to palette k-means without benefit.
+- Edge-aware radius — 2026-08-18. Sobel magnitude of L channel; `get_radius` scales inversely with edge (up to 70% shrink). Fine detail preserved, flat regions get broad strokes.
+- Soft dome penalty — 2026-08-18. `penalty[i] += 1 - d²/r²` capped at 1, replaces binary `penalty[i]=1`. Default `--overlap-tolerance` bumped 0.08 → 0.15 to compensate for lower mean.
+- Batch dedup — 2026-08-18. Skip candidate whose center falls within an earlier accept's radius in same batch (threads share residual snapshot → duplicate proposals).
 
 ---
 

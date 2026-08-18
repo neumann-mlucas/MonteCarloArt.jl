@@ -22,11 +22,14 @@ You can control several parameters to influence the output:
 
 1. **`--steps`:** upper bound on algorithm steps (more steps = more dots)
 2. **`--color-palette`:** number of colors in the palette
-3. **`--overlap-tolerance`:** base overlap tolerance (how closely dots can be placed)
+3. **`--overlap-tolerance`:** mean soft-penalty threshold under a candidate circle. Higher = denser packing (default 0.15)
 4. **`--stop-miss-rate`:** EMA miss-rate threshold for early termination when the canvas saturates (default 0.99; 1.0 = disabled)
-5. **`--alpha`:** blend factor for stacked circles (1.0 = overwrite, 0.7 ≈ Seurat-style optical mixing). PNG blends per-channel in Lab; SVG emits `fill-opacity`.
 
-Circle radii are sampled from a normal distribution scaled to image size (no user knob).
+Circle radii are sampled from a normal distribution scaled to image size **and shrunk in high-edge regions** (Sobel-magnitude driven — fine detail gets small dots, flat regions get big dots).
+
+Overlap penalty is a **dome-shaped falloff** (1 at circle center, 0 at edge) accumulated on the canvas — softer than binary occupancy, gives natural spacing.
+
+Within a batch, candidates whose centers fall inside an already-accepted candidate's radius are dropped ("batch dedup") — parallel proposals often target the same hot spot.
 
 Parallelism is auto-derived from Julia's thread count (`julia -t N`). Progress logs fire every 5% of `--steps`. Debug logging: `JULIA_DEBUG=MonteCarloArt`.
 
@@ -53,7 +56,7 @@ Output format is inferred from the `-o` file extension (`.png` or `.svg`).
 $ julia main.jl --help
 usage: main.jl -i INPUT [-o OUTPUT] [--steps STEPS] [-v] [--color]
                [--color-palette COLOR-PALETTE] [-t OVERLAP-TOLERANCE]
-               [--stop-miss-rate STOP-MISS-RATE] [--alpha ALPHA] [-h]
+               [--stop-miss-rate STOP-MISS-RATE] [-h]
 
 optional arguments:
   -i, --input INPUT     Input image path (required)
@@ -68,15 +71,13 @@ optional arguments:
                         Number of colors in the palette
                         (type: Int64, default: 64)
   -t, --overlap-tolerance OVERLAP-TOLERANCE
-                        Parameters that penalizes overlapping circles
-                        (type: Float64, default: 0.08)
+                        Mean soft-penalty threshold under a candidate
+                        circle. Higher = denser packing.
+                        (type: Float64, default: 0.15)
   --stop-miss-rate STOP-MISS-RATE
                         Early stop when EMA of miss rate exceeds this.
                         1.0 = disabled (never stop early).
                         (type: Float64, default: 0.99)
-  --alpha ALPHA         Blend factor for stacked circles (1.0 =
-                        overwrite, 0.7 = Seurat-style optical mixing).
-                        (type: Float64, default: 1.0)
   -h, --help            show this help message and exit
 
 ```
@@ -123,13 +124,6 @@ julia -O3 -t 8 main.jl --color --steps 100000 -i input.jpg -o output.gif
 Frames = `n_circles / 100`, playback = 15 fps. File size scales with input resolution × frame count — downsize input for smaller GIFs.
 
 
-- **Seurat-style Optical Mixing (alpha blend):**
-```bash
-julia -O3 -t 8 main.jl --color --steps 400000 \
-    --alpha 0.7 -i input.jpg -o output.png
-```
-
-
 - **Recommended Settings for Higher-resolution:**
 ```bash
 julia -O3 -t 8 main.jl --color --steps 400000 \
@@ -154,12 +148,11 @@ julia -O3 -t 8 main.jl --color --steps 400000 \
 
 ### TODO
 
-See `TASKS.md`. Shipped: importance sampling, threaded batch
-propose+commit, EMA coverage stop, alpha blend (Seurat mixing),
-5%-granularity progress logs. Backlog currently empty — palette
-locality, accumulating penalty, and color-aware acceptance were
-killed as speculative or redundant. New tasks wait on concrete failure
-reports.
+See `TASKS.md`. Recently shipped: edge-aware radius (Sobel-driven),
+soft dome penalty, batch dedup, dropped complement colorspace, dropped
+alpha blend, GIF output. Backlog: palette locality (per-region k-means)
+and residual-driven color pick (see TASKS.md Task 1) remain candidates
+if visual quality still lags.
 
 
 ---

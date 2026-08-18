@@ -23,7 +23,6 @@ function main()
         color_palette = args["color-palette"],
         overlap_tolerance = args["overlap-tolerance"],
         stop_miss_rate = args["stop-miss-rate"],
-        alpha = args["alpha"],
         format = fmt,
     )
 
@@ -40,7 +39,7 @@ function main()
     elseif fmt == :gif
         MonteCarloArt.save_gif(out_path, out)
     elseif fmt == :png
-        save(out_path, complement.(convert.(RGB{N0f8}, out)))
+        save(out_path, convert.(RGB{N0f8}, out))
     else
         error("Unsupported format for MonteCarloArt: $fmt")
     end
@@ -52,7 +51,6 @@ end
 function validate_args(args::AbstractDict)
     args["steps"] > 0                          || error("--steps must be > 0 (got $(args["steps"]))")
     args["color-palette"] > 0                  || error("--color-palette must be > 0 (got $(args["color-palette"]))")
-    0.0 < args["alpha"] <= 1.0                 || error("--alpha must be in (0, 1] (got $(args["alpha"]))")
     0.0 <= args["overlap-tolerance"] <= 1.0    || error("--overlap-tolerance must be in [0, 1] (got $(args["overlap-tolerance"]))")
     0.0 < args["stop-miss-rate"] <= 1.0        || error("--stop-miss-rate must be in (0, 1] (got $(args["stop-miss-rate"]))")
 end
@@ -70,17 +68,13 @@ function parse_cmd()
             arg_type = Int
             default = 64
         "--overlap-tolerance", "-t"
-            help = "Parameters that penalizes overlapping circles"
+            help = "Mean soft-penalty threshold under a candidate circle. Higher = denser packing."
             arg_type = Float64
-            default = 0.08
+            default = 0.15
         "--stop-miss-rate"
             help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
             arg_type = Float64
             default = 0.99
-        "--alpha"
-            help = "Blend factor for stacked circles (1.0 = overwrite, 0.7 = Seurat-style optical mixing). PNG blends per-channel in Lab; SVG uses fill-opacity."
-            arg_type = Float64
-            default = 1.0
     end
     parse_args(parser)
 end

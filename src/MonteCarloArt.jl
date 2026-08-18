@@ -14,6 +14,9 @@ const REL_RADIUS = 0.0032
 const REL_STD_RADIUS = 0.4
 const MIN_RADIUS = 2
 const RMAX_REFRESH = 2000
+# Edge-aware radius: mean_r scales by (1 - EDGE_SHRINK * edge_norm).
+# edge=0 (flat): full radius; edge=1 (strong edge): shrink to 30%.
+const EDGE_SHRINK = 0.7
 # EMA(α=0.99) needs ~500 steps to converge; guard against pathological
 # early stops on tiny --steps budgets. Hardcoded — no user knob.
 const MIN_STEPS_FOR_EMA_STOP = 500
@@ -26,10 +29,9 @@ const GifFrames = Vector{Matrix{RGB{N0f8}}}
 Base.@kwdef struct Config
     steps::Int = 200000
     color_palette::Int = 64
-    overlap_tolerance::Float64 = 0.08
-    stop_miss_rate::Float64 = 1.0
-    alpha::Float64 = 1.0
-    format::Symbol = :png
+    overlap_tolerance::Float64 = 0.15
+    stop_miss_rate::Float64 = 0.99
+    format::Symbol = :svg
 end
 
 export Config
@@ -39,14 +41,28 @@ export load_color_image, load_image, render, save_gif
 function load_image(path::String)::Image
     @assert isfile(path) "Image file not found: $path"
     img = Images.load(path)
-    convert.(Lab{Float64}, complement.(Gray.(img)))
+    convert.(Lab{Float64}, Gray.(img))
 end
 
 """ Load a color image and convert to Lab color space. """
 function load_color_image(path::String)::Image
     @assert isfile(path) "Image file not found: $path"
     img = Images.load(path)
-    convert.(Lab{Float64}, complement.(img))
+    convert.(Lab{Float64}, img)
+end
+
+""" Sobel-magnitude edge map of L channel, normalized to [0, 1]. """
+function edge_magnitude(inp::Image)::Matrix{Float64}
+    h, w = size(inp)
+    L = [c.l for c in inp]
+    mag = zeros(h, w)
+    @inbounds for y in 2:h-1, x in 2:w-1
+        gy = L[y+1, x] - L[y-1, x]
+        gx = L[y, x+1] - L[y, x-1]
+        mag[y, x] = sqrt(gx * gx + gy * gy)
+    end
+    m = maximum(mag)
+    m > 0 ? mag ./ m : mag
 end
 
 """ Main Monte Carlo Art algorithm. Returns Lab image (:png), SVG string (:svg), or GIF frames (:gif). """
@@ -57,6 +73,9 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
 
     palette = kmeans_palette_lab(inp, cfg.color_palette)
     @info "Finished generating color palette with $(cfg.color_palette) colors"
+
+    edge_map = edge_magnitude(inp)
+    @info "Computed edge map (mean=$(round(mean(edge_map), digits=3)), max=$(round(maximum(edge_map), digits=3)))"
 
     # importance-sampling state: residual[i] = ||inp[i] - current_canvas[i]||
     # in Lab. Sampling proposed centers proportional to residual concentrates
@@ -83,20 +102,48 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
 
         candidates = Vector{Circle}(undef, n_batch)
         Threads.@threads for k in 1:n_batch
-            candidates[k] = propose(inp, residual, r_max, palette,
+            candidates[k] = propose(inp, residual, r_max, palette, edge_map,
                                     h, w, step + k, cfg)
         end
 
         # sequential commit: re-check overlap against updated penalty so
-        # late candidates in the batch see prior commits' effects
+        # late candidates in the batch see prior commits' effects.
+        # Also dedupe: threads share the residual snapshot and often
+        # propose near-identical centers; drop candidates that fall inside
+        # an earlier accept in the same batch.
+        committed_batch = Tuple{Int,Int,Int}[]  # (y, x, r)
         for cand in candidates
+            cy, cx, cr = cand.center[1], cand.center[2], cand.radius
+
+            too_close = false
+            for (y, x, r) in committed_batch
+                dy, dx = cy - y, cx - x
+                mr = min(cr, r)
+                if dy * dy + dx * dx < mr * mr
+                    too_close = true
+                    break
+                end
+            end
+
+            if too_close
+                misses += 1
+                ema_miss = 0.99 * ema_miss + 0.01
+                continue
+            end
+
             overlap = mean(penalty[p] for p in cand.points)
             miss = overlap >= cfg.overlap_tolerance
             if !miss
                 accept += 1
                 push!(circles, cand)
+                push!(committed_batch, (cy, cx, cr))
+                r2 = cr * cr + 1
                 @inbounds for i in cand.points
-                    penalty[i]  = 1
+                    dy = i[1] - cy
+                    dx = i[2] - cx
+                    # dome falloff: 1 at center, 0 at circle edge
+                    contrib = 1 - (dy * dy + dx * dx) / r2
+                    penalty[i] = min(1.0, penalty[i] + contrib)
                     residual[i] = color_distance(inp[i], cand.color)
                 end
             else
@@ -125,21 +172,21 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
     @info "  - misses:  $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
     if cfg.format == :svg
-        return render_svg(circles, h, w, cfg.alpha)
+        return render_svg(circles, h, w)
     elseif cfg.format == :gif
-        return render_gif(circles, h, w, cfg.alpha)
+        return render_gif(circles, h, w)
     else
-        return render_png(circles, h, w, cfg.alpha)
+        return render_png(circles, h, w)
     end
 end
 
 """ Propose one circle candidate. Reads residual/penalty as a snapshot;
     safe to call in parallel across threads with shared read-only inputs. """
 @inline function propose(inp::Image, residual::Matrix{Float64}, r_max::Float64,
-                         palette::Vector{Lab{Float64}}, h::Int, w::Int,
-                         step::Int, cfg::Config)::Circle
+                         palette::Vector{Lab{Float64}}, edge_map::Matrix{Float64},
+                         h::Int, w::Int, step::Int, cfg::Config)::Circle
     point  = importance_center(residual, r_max)
-    radius = get_radius(h, w)
+    radius = get_radius(h, w, @inbounds edge_map[point[1], point[2]])
     points = gen_circle_points((h, w), point, radius)
     pixels = getindex.(Ref(inp), points)
     avg    = mean_color(pixels)
@@ -147,29 +194,21 @@ end
     (center=point, radius=radius, color=palette[idx], points=points)
 end
 
-""" Render list of circles into a Lab image. alpha=1.0 overwrites (Seurat off);
-    alpha<1.0 blends new color into canvas per-channel (optical mixing). """
-function render_png(circles::Vector{Circle}, h::Int, w::Int, alpha::Float64=1.0)::Image
-    out = fill(Lab{Float64}(0, 0, 0), h, w)
-    if alpha >= 1.0
-        for c in circles, i in c.points
-            out[i] = c.color
-        end
-    else
-        a, b = alpha, 1.0 - alpha
-        for c in circles, i in c.points
-            p = out[i]; q = c.color
-            out[i] = Lab{Float64}(a * q.l + b * p.l,
-                                  a * q.a + b * p.a,
-                                  a * q.b + b * p.b)
-        end
+""" Render list of circles into a Lab image (white background). """
+function render_png(circles::Vector{Circle}, h::Int, w::Int)::Image
+    out = fill(Lab{Float64}(100, 0, 0), h, w)
+    for c in circles, i in c.points
+        out[i] = c.color
     end
     out
 end
 
-""" Sample a radius from a normal distribution scaled to image size. """
-@inline function get_radius(height::Int, width::Int)::Int
-    mean_r = min(height, width) * REL_RADIUS
+""" Sample a radius from a normal distribution scaled to image size and
+    inversely to local edge magnitude. Strong edges shrink the mean by up
+    to EDGE_SHRINK to preserve fine detail. """
+@inline function get_radius(height::Int, width::Int, edge::Float64)::Int
+    scale = 1.0 - EDGE_SHRINK * edge
+    mean_r = min(height, width) * REL_RADIUS * scale
     std = mean_r * REL_STD_RADIUS
     max(MIN_RADIUS, floor(Int, abs(randn() * std + mean_r)))
 end
@@ -198,41 +237,29 @@ end
 
 """ Render list of circles into SVG content. Stream to IOBuffer to avoid
     materializing N per-circle Strings before concatenation. """
-function render_svg(circles::Vector{Circle}, height::Int, width::Int, alpha::Float64=1.0)::String
+function render_svg(circles::Vector{Circle}, height::Int, width::Int)::String
     io = IOBuffer()
     println(io, svg_open(width, height))
     for c in circles
-        println(io, draw_circle(c, alpha))
+        println(io, draw_circle(c))
     end
     print(io, SVG_CLOSE)
     String(take!(io))
 end
 
-# Circles are stored in complement-Lab space (see load_*_image). SVG needs
-# display-space colors, so invert before hexifying.
-svg_color(c::Lab) = rgb_hex(complement(convert(RGB{N0f8}, c)))
+svg_color(c::Lab) = rgb_hex(convert(RGB{N0f8}, c))
 
 """ Replay committed circles onto a running canvas, snapshotting every
     GIF_INTERVAL circles. Frames in display-space RGB{N0f8}. """
-function render_gif(circles::Vector{Circle}, h::Int, w::Int, alpha::Float64=1.0)::GifFrames
-    out = fill(Lab{Float64}(0, 0, 0), h, w)
+function render_gif(circles::Vector{Circle}, h::Int, w::Int)::GifFrames
+    out = fill(Lab{Float64}(100, 0, 0), h, w)
     frames = GifFrames()
-    a, b = alpha, 1.0 - alpha
     for (n, c) in enumerate(circles)
-        if alpha >= 1.0
-            @inbounds for i in c.points
-                out[i] = c.color
-            end
-        else
-            @inbounds for i in c.points
-                p = out[i]; q = c.color
-                out[i] = Lab{Float64}(a * q.l + b * p.l,
-                                      a * q.a + b * p.a,
-                                      a * q.b + b * p.b)
-            end
+        @inbounds for i in c.points
+            out[i] = c.color
         end
         if n % GIF_INTERVAL == 0 || n == length(circles)
-            push!(frames, complement.(convert.(RGB{N0f8}, out)))
+            push!(frames, convert.(RGB{N0f8}, out))
         end
     end
     @info "GIF: $(length(frames)) frames at $GIF_FPS fps ($(round(length(frames)/GIF_FPS, digits=1))s clip)"
@@ -245,15 +272,11 @@ function save_gif(path::String, frames::GifFrames)
     save(path, stack(frames; dims=3), fps=GIF_FPS)
 end
 
-""" Draw a circle in SVG format. """
-function draw_circle(c::Circle, alpha::Float64=1.0)::String
+""" Draw a circle in SVG format. Darker outline via L-shift toward black. """
+function draw_circle(c::Circle)::String
     fill = svg_color(c.color)
-    # Darker outline in output: shift L up in complement-Lab space, keep a/b,
-    # clamp to gamut to avoid out-of-range values.
-    stroke = svg_color(Lab(min(c.color.l + 12, 100), c.color.a, c.color.b))
-    # Match stroke opacity to fill opacity, else outlines look hard over faded fill.
-    op = alpha >= 1.0 ? "" : " fill-opacity=\"$(round(alpha, digits=3))\" stroke-opacity=\"$(round(alpha, digits=3))\""
-    """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill"$op stroke="$stroke" stroke-width="0.5" />"""
+    stroke = svg_color(Lab(max(c.color.l - 12, 0), c.color.a, c.color.b))
+    """<circle cx="$(c.center[2])" cy="$(c.center[1])" r="$(c.radius)" fill="$fill" stroke="$stroke" stroke-width="0.5" />"""
 end
 
 end
