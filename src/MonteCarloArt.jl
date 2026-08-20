@@ -45,11 +45,10 @@ Base.@kwdef struct Config
     color_palette::Int = 64
     overlap_tolerance::Float64 = 0.15
     stop_miss_rate::Float64 = 0.99
-    format::Symbol = :svg
 end
 
 export Config
-export load_color_image, load_image, render, save_gif
+export load_color_image, load_image, render, render_png, render_svg, render_gif, save_gif
 
 function load_image(path::String)::Image
     isfile(path) || error("Image file not found: $path")
@@ -77,8 +76,9 @@ function edge_magnitude(inp::Image)::Matrix{Float64}
     m > 0 ? mag ./ m : mag
 end
 
-""" Main Monte Carlo Art algorithm. Returns Lab image (:png), SVG string (:svg), or GIF frames (:gif). """
-function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
+""" Main Monte Carlo Art algorithm. Returns (circles, height, width);
+    caller picks a `render_*` writer per output format. """
+function render(inp::Image, cfg::Config)::Tuple{Vector{Circle},Int,Int}
     h, w = size(inp)
     penalty = zeros(Float64, h, w)
     circles = Circle[]
@@ -195,13 +195,7 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
     @info "  - accept:  $(lpad(accept, 8)) [$(to_pct(accept))%]"
     @info "  - misses:  $(lpad(misses, 8)) [$(to_pct(misses))%]"
 
-    if cfg.format == :svg
-        return render_svg(circles, h, w)
-    elseif cfg.format == :gif
-        return render_gif(circles, h, w)
-    else
-        return render_png(circles, h, w)
-    end
+    return (circles, h, w)
 end
 
 """ Propose one circle candidate. Reads residual/penalty as a snapshot;

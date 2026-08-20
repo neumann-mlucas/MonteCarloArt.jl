@@ -15,16 +15,12 @@ function main()
     validate_args(args)
 
     outputs = MonteCarloArt.resolve_output(args["output"])
-    length(outputs) == 1 ||
-        error("MonteCarloArt supports one output at a time (got $(length(outputs)))")
-    out_path, fmt = outputs[1]
 
     cfg = MonteCarloArt.Config(
         steps=args["steps"],
         color_palette=args["color-palette"],
         overlap_tolerance=args["overlap-tolerance"],
         stop_miss_rate=args["stop-miss-rate"],
-        format=fmt,
     )
 
     input_path = args["input"]
@@ -32,17 +28,19 @@ function main()
     inp = args["color"] ? load_color_image(input_path) : load_image(input_path)
 
     @info "Running Monte Carlo algorithm"
-    out = MonteCarloArt.render(inp, cfg)
+    circles, h, w = MonteCarloArt.render(inp, cfg)
 
-    @info "Saving output to '$out_path' ($fmt)"
-    if fmt == :svg
-        MonteCarloArt.write_svg(out_path, out)
-    elseif fmt == :gif
-        MonteCarloArt.save_gif(out_path, out)
-    elseif fmt == :png
-        save(out_path, convert.(RGB{N0f8}, out))
-    else
-        error("Unsupported format for MonteCarloArt: $fmt")
+    for (out_path, fmt) in outputs
+        @info "Saving output to '$out_path' ($fmt)"
+        if fmt == :svg
+            MonteCarloArt.write_svg(out_path, MonteCarloArt.render_svg(circles, h, w))
+        elseif fmt == :gif
+            MonteCarloArt.save_gif(out_path, MonteCarloArt.render_gif(circles, h, w))
+        elseif fmt == :png
+            save(out_path, convert.(RGB{N0f8}, MonteCarloArt.render_png(circles, h, w)))
+        else
+            error("Unsupported format for MonteCarloArt: $fmt")
+        end
     end
 
     @info "Processing completed"
