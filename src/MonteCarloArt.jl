@@ -4,7 +4,7 @@ include("common.jl")
 
 const Image = Matrix{Lab{Float64}}
 const Circle = @NamedTuple{
-    center::Tuple{Int,Int},
+    center::Tuple{Int,Int},  # (y, x) — Julia array order; draw_circle swaps for SVG
     radius::Int,
     color::Lab{Float64},
 }
@@ -51,14 +51,12 @@ end
 export Config
 export load_color_image, load_image, render, save_gif
 
-""" Load a grayscale version of the image and convert to Lab color space. """
 function load_image(path::String)::Image
     isfile(path) || error("Image file not found: $path")
     img = Images.load(path)
     convert.(Lab{Float64}, Gray.(img))
 end
 
-""" Load a color image and convert to Lab color space. """
 function load_color_image(path::String)::Image
     isfile(path) || error("Image file not found: $path")
     img = Images.load(path)
@@ -99,6 +97,7 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
     residual = color_distance.(inp, Ref(canvas_seed))
     r_max    = maximum(residual)
 
+    # thread count from Threads.nthreads(); requires JULIA_NUM_THREADS or `julia -t N`
     batch_size = Threads.nthreads()
     accept, misses = 0, 0
     ema_miss  = 0.0
@@ -109,6 +108,8 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
 
     while step < cfg.steps
         n_batch = min(batch_size, cfg.steps - step)
+        # refresh envelope: residual updates in place per accept and can grow
+        # when a painted color is a worse fit; stale r_max under-samples peaks.
         if step >= next_rmax
             r_max = maximum(residual)
             next_rmax += RMAX_REFRESH
@@ -117,8 +118,7 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
         cand_circles = Vector{Circle}(undef, n_batch)
         cand_points  = Vector{Vector{CartesianIndex{2}}}(undef, n_batch)
         Threads.@threads for k in 1:n_batch
-            cand_circles[k], cand_points[k] = propose(inp, residual, r_max, palette, edge_map,
-                                                      h, w, step + k, cfg)
+            cand_circles[k], cand_points[k] = propose(inp, residual, r_max, palette, edge_map, h, w)
         end
 
         # sequential commit: re-check overlap against updated penalty so
@@ -208,11 +208,12 @@ end
     Returns (circle, points) — points transient, not stored per accept. """
 @inline function propose(inp::Image, residual::Matrix{Float64}, r_max::Float64,
                          palette::Vector{Lab{Float64}}, edge_map::Matrix{Float64},
-                         h::Int, w::Int, step::Int, cfg::Config)::Tuple{Circle,Vector{CartesianIndex{2}}}
+                         h::Int, w::Int)::Tuple{Circle,Vector{CartesianIndex{2}}}
     point  = importance_center(residual, r_max)
     radius = get_radius(h, w, @inbounds edge_map[point[1], point[2]])
     points = gen_circle_points((h, w), point, radius)
     if isempty(points)
+        # center clipped off canvas; caller drops via isempty guard, color unread
         return ((center=point, radius=radius, color=palette[1]), points)
     end
     pixels = getindex.(Ref(inp), points)
@@ -221,9 +222,8 @@ end
     ((center=point, radius=radius, color=palette[idx]), points)
 end
 
-""" Render list of circles into a Lab image (white background). """
 function render_png(circles::Vector{Circle}, h::Int, w::Int)::Image
-    out = fill(Lab{Float64}(100, 0, 0), h, w)
+    out = fill(Lab{Float64}(100, 0, 0), h, w)  # white background
     for c in circles, i in gen_circle_points((h, w), c.center, c.radius)
         out[i] = c.color
     end
@@ -296,7 +296,6 @@ function render_gif(circles::Vector{Circle}, h::Int, w::Int)::GifFrames
     frames
 end
 
-""" Write GIF frames as animated GIF. Mirrors StringArt.save_gif. """
 function save_gif(path::String, frames::GifFrames)
     isempty(frames) && return
     save(path, stack(frames; dims=3), fps=GIF_FPS)
