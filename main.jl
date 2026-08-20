@@ -15,15 +15,16 @@ function main()
     validate_args(args)
 
     outputs = MonteCarloArt.resolve_output(args["output"])
-    length(outputs) == 1 || error("MonteCarloArt supports one output at a time (got $(length(outputs)))")
+    length(outputs) == 1 ||
+        error("MonteCarloArt supports one output at a time (got $(length(outputs)))")
     out_path, fmt = outputs[1]
 
     cfg = MonteCarloArt.Config(
-        steps = args["steps"],
-        color_palette = args["color-palette"],
-        overlap_tolerance = args["overlap-tolerance"],
-        stop_miss_rate = args["stop-miss-rate"],
-        format = fmt,
+        steps=args["steps"],
+        color_palette=args["color-palette"],
+        overlap_tolerance=args["overlap-tolerance"],
+        stop_miss_rate=args["stop-miss-rate"],
+        format=fmt,
     )
 
     input_path = args["input"]
@@ -49,32 +50,39 @@ end
 
 """ Assert CLI args are in sane ranges. Trust boundary — fail loud, not silent NaN. """
 function validate_args(args::AbstractDict)
-    args["steps"] > 0                          || error("--steps must be > 0 (got $(args["steps"]))")
-    args["color-palette"] > 0                  || error("--color-palette must be > 0 (got $(args["color-palette"]))")
-    0.0 <= args["overlap-tolerance"] <= 1.0    || error("--overlap-tolerance must be in [0, 1] (got $(args["overlap-tolerance"]))")
-    0.0 < args["stop-miss-rate"] <= 1.0        || error("--stop-miss-rate must be in (0, 1] (got $(args["stop-miss-rate"]))")
+    args["steps"] > 0 || error("--steps must be > 0 (got $(args["steps"]))")
+    args["color-palette"] > 0 ||
+        error("--color-palette must be > 0 (got $(args["color-palette"]))")
+    0.0 <= args["overlap-tolerance"] <= 1.0 ||
+        error("--overlap-tolerance must be in [0, 1] (got $(args["overlap-tolerance"]))")
+    0.0 < args["stop-miss-rate"] <= 1.0 ||
+        error("--stop-miss-rate must be in (0, 1] (got $(args["stop-miss-rate"]))")
 end
 
 """ Parse command-line arguments using ArgParse. """
 function parse_cmd()
     parser = ArgParseSettings()
-    MonteCarloArt.add_common_args!(parser; steps_default=200000, output_default="output.svg")
+    MonteCarloArt.add_common_args!(
+        parser;
+        steps_default=200000,
+        output_default="output.svg",
+    )
     @add_arg_table! parser begin
         "--color"
-            help = "Enable color mode (use input colors instead of grayscale)"
-            action = :store_true
+        help = "Enable color mode (use input colors instead of grayscale)"
+        action = :store_true
         "--color-palette"
-            help = "Number of colors in the palette"
-            arg_type = Int
-            default = 64
+        help = "Number of colors in the palette"
+        arg_type = Int
+        default = 64
         "--overlap-tolerance", "-t"
-            help = "Mean soft-penalty threshold under a candidate circle. Higher = denser packing."
-            arg_type = Float64
-            default = 0.15
+        help = "Mean soft-penalty threshold under a candidate circle. Higher = denser packing."
+        arg_type = Float64
+        default = 0.15
         "--stop-miss-rate"
-            help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
-            arg_type = Float64
-            default = 0.99
+        help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
+        arg_type = Float64
+        default = 0.99
     end
     parse_args(parser)
 end

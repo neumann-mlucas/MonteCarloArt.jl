@@ -37,7 +37,7 @@ const STENCIL_LOCK = ReentrantLock()
 const STENCIL_CACHE = Dict{Int,Vector{Tuple{Int,Int}}}()
 
 stencil(r::Int) = @lock STENCIL_LOCK get!(STENCIL_CACHE, r) do
-    Tuple{Int,Int}[(dy, dx) for dx in -r:r, dy in -r:r if dx * dx + dy * dy <= r * r]
+    Tuple{Int,Int}[(dy, dx) for dx = (-r):r, dy = (-r):r if dx * dx + dy * dy <= r * r]
 end
 
 Base.@kwdef struct Config
@@ -68,7 +68,7 @@ function edge_magnitude(inp::Image)::Matrix{Float64}
     h, w = size(inp)
     L = [c.l for c in inp]
     mag = zeros(h, w)
-    @inbounds for y in 2:h-1, x in 2:w-1
+    @inbounds for y = 2:(h-1), x = 2:(w-1)
         gy = L[y+1, x] - L[y-1, x]
         gx = L[y, x+1] - L[y, x-1]
         mag[y, x] = sqrt(gx * gx + gy * gy)
@@ -95,16 +95,16 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
     # initial residual reflects local deviation, not raw luminance.
     canvas_seed = mean_color(vec(inp))
     residual = color_distance.(inp, Ref(canvas_seed))
-    r_max    = maximum(residual)
+    r_max = maximum(residual)
 
     # thread count from Threads.nthreads(); requires JULIA_NUM_THREADS or `julia -t N`
     batch_size = Threads.nthreads()
     accept, misses = 0, 0
-    ema_miss  = 0.0
+    ema_miss = 0.0
     next_rmax = RMAX_REFRESH
-    step      = 0
+    step = 0
     progress_stride = max(1, cfg.steps ÷ 20)
-    next_progress   = progress_stride
+    next_progress = progress_stride
 
     while step < cfg.steps
         n_batch = min(batch_size, cfg.steps - step)
@@ -116,9 +116,10 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
         end
 
         cand_circles = Vector{Circle}(undef, n_batch)
-        cand_points  = Vector{Vector{CartesianIndex{2}}}(undef, n_batch)
-        Threads.@threads for k in 1:n_batch
-            cand_circles[k], cand_points[k] = propose(inp, residual, r_max, palette, edge_map, h, w)
+        cand_points = Vector{Vector{CartesianIndex{2}}}(undef, n_batch)
+        Threads.@threads for k = 1:n_batch
+            cand_circles[k], cand_points[k] =
+                propose(inp, residual, r_max, palette, edge_map, h, w)
         end
 
         # sequential commit: re-check overlap against updated penalty so
@@ -127,7 +128,7 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
         # propose near-identical centers; drop candidates that fall inside
         # an earlier accept in the same batch.
         committed_batch = Tuple{Int,Int,Int}[]  # (y, x, r)
-        for k in 1:n_batch
+        for k = 1:n_batch
             cand = cand_circles[k]
             points = cand_points[k]
             cy, cx, cr = cand.center[1], cand.center[2], cand.radius
@@ -206,10 +207,16 @@ end
 """ Propose one circle candidate. Reads residual/penalty as a snapshot;
     safe to call in parallel across threads with shared read-only inputs.
     Returns (circle, points) — points transient, not stored per accept. """
-@inline function propose(inp::Image, residual::Matrix{Float64}, r_max::Float64,
-                         palette::Vector{Lab{Float64}}, edge_map::Matrix{Float64},
-                         h::Int, w::Int)::Tuple{Circle,Vector{CartesianIndex{2}}}
-    point  = importance_center(residual, r_max)
+@inline function propose(
+    inp::Image,
+    residual::Matrix{Float64},
+    r_max::Float64,
+    palette::Vector{Lab{Float64}},
+    edge_map::Matrix{Float64},
+    h::Int,
+    w::Int,
+)::Tuple{Circle,Vector{CartesianIndex{2}}}
+    point = importance_center(residual, r_max)
     radius = get_radius(h, w, @inbounds edge_map[point[1], point[2]])
     points = gen_circle_points((h, w), point, radius)
     if isempty(points)
@@ -217,8 +224,8 @@ end
         return ((center=point, radius=radius, color=palette[1]), points)
     end
     pixels = getindex.(Ref(inp), points)
-    avg    = mean_color(pixels)
-    idx    = argmin(color_distance(c, avg) for c in palette)
+    avg = mean_color(pixels)
+    idx = argmin(color_distance(c, avg) for c in palette)
     ((center=point, radius=radius, color=palette[idx]), points)
 end
 
@@ -241,7 +248,10 @@ end
 end
 
 """ Sample a center via rejection, biased toward high-residual pixels. """
-@inline function importance_center(residual::Matrix{Float64}, r_max::Float64)::Tuple{Int,Int}
+@inline function importance_center(
+    residual::Matrix{Float64},
+    r_max::Float64,
+)::Tuple{Int,Int}
     h, w = size(residual)
     # degenerate case: residual collapsed to zero, fall back to uniform
     r_max <= 0 && return (rand(1:h), rand(1:w))
@@ -255,13 +265,16 @@ end
 
 """ Generate points that form a filled circle of given radius, clipped to
     image bounds. Uses cached offset stencil per radius. """
-@inline function gen_circle_points(dims::Tuple{Int,Int}, center::Tuple{Int,Int}, radius::Int)::Vector{CartesianIndex{2}}
+@inline function gen_circle_points(
+    dims::Tuple{Int,Int},
+    center::Tuple{Int,Int},
+    radius::Int,
+)::Vector{CartesianIndex{2}}
     cy, cx = center
     h, w = dims
     CartesianIndex{2}[
-        CartesianIndex(cy + dy, cx + dx)
-        for (dy, dx) in stencil(radius)
-        if 1 <= cy + dy <= h && 1 <= cx + dx <= w
+        CartesianIndex(cy + dy, cx + dx) for
+        (dy, dx) in stencil(radius) if 1 <= cy + dy <= h && 1 <= cx + dx <= w
     ]
 end
 
