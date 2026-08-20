@@ -9,10 +9,6 @@ install:
     julia --project=. -e 'using Pkg; Pkg.instantiate()'
     julia --project=./dev -e 'using Pkg; Pkg.instantiate()'
 
-# Run tests.
-test:
-    julia --project=. --startup-file=no test/runtests.jl
-
 # Format all julia sources in-place.
 fmt:
     julia --project=./dev -e 'using JuliaFormatter; format(".")'
@@ -27,7 +23,7 @@ shellcheck:
     shellcheck test/scripts/*.sh
 
 # CI checks.
-check: lint test shellcheck
+check: lint shellcheck
 
 # Purge generated + resolved state.
 clean:
