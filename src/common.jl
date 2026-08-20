@@ -1,6 +1,6 @@
 # common.jl — vendored shared utilities.
 # Kept in sync (by convention) between StringArt.jl/src/ and MonteCarloArt.jl/src/.
-# Edits in one must be mirrored to the other.
+# Edits in one must be mirrored to the other. `just check-sync` fails on drift.
 
 using ArgParse
 using Clustering: kmeans
@@ -99,8 +99,13 @@ end
 # --- CLI helpers ---------------------------------------------------------
 
 """ Register CLI args common to both projects (input/output/steps/verbose).
-    Canvas size is per-project (only StringArt uses it). """
-function add_common_args!(parser::ArgParseSettings; steps_default::Int=1000)
+    Canvas size is per-project (only StringArt uses it).
+    Per-project default output path via `output_default` kwarg. """
+function add_common_args!(
+    parser::ArgParseSettings;
+    steps_default::Int=1000,
+    output_default::AbstractString="output.png",
+)
     @add_arg_table! parser begin
         "--input", "-i"
             help = "input image path"
@@ -109,7 +114,7 @@ function add_common_args!(parser::ArgParseSettings; steps_default::Int=1000)
         "--output", "-o"
             help = "output path with extension (.png/.svg/.gif); comma-separate for multiple"
             arg_type = String
-            default = "output.svg"
+            default = output_default
         "--steps"
             help = "algorithm iteration count"
             arg_type = Int

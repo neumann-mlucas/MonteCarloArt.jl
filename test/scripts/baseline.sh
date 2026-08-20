@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Baseline run: current-HEAD × corpus × canonical configs.
+# Baseline run for MonteCarloArt.jl: current-HEAD × corpus × canonical configs.
 # Skips outputs that already exist.
 #
 # Usage:  ./test/scripts/baseline.sh                # full corpus
 #         ./test/scripts/baseline.sh aristotle.png  # subset (basename or path)
+#
+# Env: JULIA_NUM_THREADS (default 8), JULIA_BIN.
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-PROJECT_DIR="$(cd -- "${HERE}/../.." &>/dev/null && pwd)"
-CORPUS_DIR="${PROJECT_DIR}/test/fixtures"
-OUT_DIR="${PROJECT_DIR}/test/results/baseline"
-NORM_DIR="${OUT_DIR}/_inputs"
-BENCH_CSV="${OUT_DIR}/bench.csv"
-JULIA_BIN="${JULIA_BIN:-julia}"
-JULIA_OPTS=(-O3 -t 8)
+source "${HERE}/lib.sh"
+
+set_out_dir "baseline"
+JULIA_OPTS=(-O3 -t "${JULIA_NUM_THREADS:-8}")
 CSV_HEADER="image,config,steps,palette,tol,seconds,circles,status,git_sha"
 
 # name|steps|palette|tol
@@ -20,8 +19,6 @@ CONFIGS=(
   "fast|100000|64|0.08"
   "full|300000|64|0.08"
 )
-
-source "${HERE}/lib.sh"
 
 run_config() {
   local cfg="$1" input="$2" out_stem="$3"

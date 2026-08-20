@@ -58,7 +58,7 @@ end
 """ Parse command-line arguments using ArgParse. """
 function parse_cmd()
     parser = ArgParseSettings()
-    MonteCarloArt.add_common_args!(parser; steps_default=200000)
+    MonteCarloArt.add_common_args!(parser; steps_default=200000, output_default="output.svg")
     @add_arg_table! parser begin
         "--color"
             help = "Enable color mode (use input colors instead of grayscale)"
