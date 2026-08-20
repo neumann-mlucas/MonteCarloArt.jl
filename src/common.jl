@@ -49,7 +49,7 @@ end
 
 """ Load image, crop to centered square, resize to `size`x`size`. """
 function load_square(path::AbstractString, size::Int)
-    @assert isfile(path) "Image file not found: $path"
+    isfile(path) || error("Image file not found: $path")
     img = Images.load(path)
     Images.imresize(crop_to_square(img), size, size)
 end

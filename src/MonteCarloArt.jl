@@ -7,7 +7,6 @@ const Circle = @NamedTuple{
     center::Tuple{Int,Int},
     radius::Int,
     color::Lab{Float64},
-    points::Vector{CartesianIndex{2}},
 }
 
 const REL_RADIUS = 0.0032
@@ -23,8 +22,23 @@ const MIN_STEPS_FOR_EMA_STOP = 500
 # GIF: snapshot every N committed circles. ~200-400 frames typical.
 const GIF_INTERVAL = 100
 const GIF_FPS = 15
+# EMA smoothing factor for miss rate; obs weighted (1-EMA_ALPHA).
+const EMA_ALPHA = 0.99
 
 const GifFrames = Vector{Matrix{RGB{N0f8}}}
+
+@inline update_ema(prev::Float64, obs::Float64)::Float64 =
+    EMA_ALPHA * prev + (1 - EMA_ALPHA) * obs
+
+# Circle-shape offset cache. Radii repeat across proposals; cache avoids
+# rebuilding the (2r+1)² stencil per candidate. Locked because Base.Dict is
+# not thread-safe under concurrent get!.
+const STENCIL_LOCK = ReentrantLock()
+const STENCIL_CACHE = Dict{Int,Vector{Tuple{Int,Int}}}()
+
+stencil(r::Int) = @lock STENCIL_LOCK get!(STENCIL_CACHE, r) do
+    Tuple{Int,Int}[(dy, dx) for dx in -r:r, dy in -r:r if dx * dx + dy * dy <= r * r]
+end
 
 Base.@kwdef struct Config
     steps::Int = 200000
@@ -39,14 +53,14 @@ export load_color_image, load_image, render, save_gif
 
 """ Load a grayscale version of the image and convert to Lab color space. """
 function load_image(path::String)::Image
-    @assert isfile(path) "Image file not found: $path"
+    isfile(path) || error("Image file not found: $path")
     img = Images.load(path)
     convert.(Lab{Float64}, Gray.(img))
 end
 
 """ Load a color image and convert to Lab color space. """
 function load_color_image(path::String)::Image
-    @assert isfile(path) "Image file not found: $path"
+    isfile(path) || error("Image file not found: $path")
     img = Images.load(path)
     convert.(Lab{Float64}, img)
 end
@@ -100,10 +114,11 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
             next_rmax += RMAX_REFRESH
         end
 
-        candidates = Vector{Circle}(undef, n_batch)
+        cand_circles = Vector{Circle}(undef, n_batch)
+        cand_points  = Vector{Vector{CartesianIndex{2}}}(undef, n_batch)
         Threads.@threads for k in 1:n_batch
-            candidates[k] = propose(inp, residual, r_max, palette, edge_map,
-                                    h, w, step + k, cfg)
+            cand_circles[k], cand_points[k] = propose(inp, residual, r_max, palette, edge_map,
+                                                      h, w, step + k, cfg)
         end
 
         # sequential commit: re-check overlap against updated penalty so
@@ -112,8 +127,16 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
         # propose near-identical centers; drop candidates that fall inside
         # an earlier accept in the same batch.
         committed_batch = Tuple{Int,Int,Int}[]  # (y, x, r)
-        for cand in candidates
+        for k in 1:n_batch
+            cand = cand_circles[k]
+            points = cand_points[k]
             cy, cx, cr = cand.center[1], cand.center[2], cand.radius
+
+            if isempty(points)
+                misses += 1
+                ema_miss = update_ema(ema_miss, 1.0)
+                continue
+            end
 
             too_close = false
             for (y, x, r) in committed_batch
@@ -127,18 +150,18 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
 
             if too_close
                 misses += 1
-                ema_miss = 0.99 * ema_miss + 0.01
+                ema_miss = update_ema(ema_miss, 1.0)
                 continue
             end
 
-            overlap = mean(penalty[p] for p in cand.points)
+            overlap = mean(penalty[p] for p in points)
             miss = overlap >= cfg.overlap_tolerance
             if !miss
                 accept += 1
                 push!(circles, cand)
                 push!(committed_batch, (cy, cx, cr))
                 r2 = cr * cr + 1
-                @inbounds for i in cand.points
+                @inbounds for i in points
                     dy = i[1] - cy
                     dx = i[2] - cx
                     # dome falloff: 1 at center, 0 at circle edge
@@ -149,7 +172,7 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
             else
                 misses += 1
             end
-            ema_miss = 0.99 * ema_miss + 0.01 * (miss ? 1.0 : 0.0)
+            ema_miss = update_ema(ema_miss, miss ? 1.0 : 0.0)
         end
 
         step += n_batch
@@ -181,23 +204,27 @@ function render(inp::Image, cfg::Config)::Union{Image,String,GifFrames}
 end
 
 """ Propose one circle candidate. Reads residual/penalty as a snapshot;
-    safe to call in parallel across threads with shared read-only inputs. """
+    safe to call in parallel across threads with shared read-only inputs.
+    Returns (circle, points) — points transient, not stored per accept. """
 @inline function propose(inp::Image, residual::Matrix{Float64}, r_max::Float64,
                          palette::Vector{Lab{Float64}}, edge_map::Matrix{Float64},
-                         h::Int, w::Int, step::Int, cfg::Config)::Circle
+                         h::Int, w::Int, step::Int, cfg::Config)::Tuple{Circle,Vector{CartesianIndex{2}}}
     point  = importance_center(residual, r_max)
     radius = get_radius(h, w, @inbounds edge_map[point[1], point[2]])
     points = gen_circle_points((h, w), point, radius)
+    if isempty(points)
+        return ((center=point, radius=radius, color=palette[1]), points)
+    end
     pixels = getindex.(Ref(inp), points)
     avg    = mean_color(pixels)
     idx    = argmin(color_distance(c, avg) for c in palette)
-    (center=point, radius=radius, color=palette[idx], points=points)
+    ((center=point, radius=radius, color=palette[idx]), points)
 end
 
 """ Render list of circles into a Lab image (white background). """
 function render_png(circles::Vector{Circle}, h::Int, w::Int)::Image
     out = fill(Lab{Float64}(100, 0, 0), h, w)
-    for c in circles, i in c.points
+    for c in circles, i in gen_circle_points((h, w), c.center, c.radius)
         out[i] = c.color
     end
     out
@@ -226,12 +253,15 @@ end
     end
 end
 
-""" Generate points that form a filled circle of given radius. """
+""" Generate points that form a filled circle of given radius, clipped to
+    image bounds. Uses cached offset stencil per radius. """
 @inline function gen_circle_points(dims::Tuple{Int,Int}, center::Tuple{Int,Int}, radius::Int)::Vector{CartesianIndex{2}}
+    cy, cx = center
+    h, w = dims
     CartesianIndex{2}[
-        CartesianIndex(center[1] + dx, center[2] + dy)
-        for dx in -radius:radius, dy in -radius:radius
-        if dx^2 + dy^2 <= radius^2 && 1 <= center[1] + dx <= dims[1] && 1 <= center[2] + dy <= dims[2]
+        CartesianIndex(cy + dy, cx + dx)
+        for (dy, dx) in stencil(radius)
+        if 1 <= cy + dy <= h && 1 <= cx + dx <= w
     ]
 end
 
@@ -255,7 +285,7 @@ function render_gif(circles::Vector{Circle}, h::Int, w::Int)::GifFrames
     out = fill(Lab{Float64}(100, 0, 0), h, w)
     frames = GifFrames()
     for (n, c) in enumerate(circles)
-        @inbounds for i in c.points
+        @inbounds for i in gen_circle_points((h, w), c.center, c.radius)
             out[i] = c.color
         end
         if n % GIF_INTERVAL == 0 || n == length(circles)
