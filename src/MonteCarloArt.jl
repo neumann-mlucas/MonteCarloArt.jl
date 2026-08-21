@@ -74,6 +74,26 @@ end
 
 export Config, Stroke
 export load_color_image, load_image, render, render_png, render_svg, render_gif, save_gif
+export resolve_background
+
+const WHITE_LAB = Lab{Float64}(100, 0, 0)
+const BLACK_LAB = Lab{Float64}(0, 0, 0)
+
+""" Resolve --background spec into a Lab color. "mean" needs `inp` (image mean).
+    "white"/"black" are literals. "#rrggbb" parses via common.jl helper. """
+function resolve_background(spec::AbstractString, inp::Image)::Lab{Float64}
+    if spec == "white"
+        WHITE_LAB
+    elseif spec == "black"
+        BLACK_LAB
+    elseif spec == "mean"
+        mean_color(vec(inp))
+    elseif startswith(spec, "#")
+        convert(Lab{Float64}, first(parse_hex_colors(spec)))
+    else
+        error("--background: expected white|black|mean|#rrggbb, got '$spec'")
+    end
+end
 
 function load_image(path::String)::Image
     isfile(path) || error("Image file not found: $path")
@@ -262,8 +282,13 @@ end
     )
 end
 
-function render_png(strokes::Vector{Stroke}, h::Int, w::Int)::Image
-    out = fill(Lab{Float64}(100, 0, 0), h, w)  # white background
+function render_png(
+    strokes::Vector{Stroke},
+    h::Int,
+    w::Int;
+    bg::Lab{Float64}=WHITE_LAB,
+)::Image
+    out = fill(bg, h, w)
     for s in strokes, p in gen_stroke_points((h, w), s.center, s.r_major, s.r_minor, s.theta_bin)
         out[p.idx] = s.color
     end
@@ -363,9 +388,15 @@ end
 
 """ Render list of strokes into SVG content. Stream to IOBuffer to avoid
     materializing N per-stroke Strings before concatenation. """
-function render_svg(strokes::Vector{Stroke}, height::Int, width::Int)::String
+function render_svg(
+    strokes::Vector{Stroke},
+    height::Int,
+    width::Int;
+    bg::Lab{Float64}=WHITE_LAB,
+)::String
     io = IOBuffer()
     println(io, svg_open(width, height))
+    println(io, """<rect x="0" y="0" width="$width" height="$height" fill="$(svg_color(bg))" />""")
     for s in strokes
         println(io, draw_stroke(s))
     end
@@ -377,8 +408,13 @@ svg_color(c::Lab) = rgb_hex(convert(RGB{N0f8}, c))
 
 """ Replay committed strokes onto a running canvas, snapshotting every
     GIF_INTERVAL strokes. Frames in display-space RGB{N0f8}. """
-function render_gif(strokes::Vector{Stroke}, h::Int, w::Int)::GifFrames
-    out = fill(Lab{Float64}(100, 0, 0), h, w)
+function render_gif(
+    strokes::Vector{Stroke},
+    h::Int,
+    w::Int;
+    bg::Lab{Float64}=WHITE_LAB,
+)::GifFrames
+    out = fill(bg, h, w)
     frames = GifFrames()
     for (n, s) in enumerate(strokes)
         @inbounds for p in gen_stroke_points((h, w), s.center, s.r_major, s.r_minor, s.theta_bin)

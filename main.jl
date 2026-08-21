@@ -27,17 +27,20 @@ function main()
     @info "Loading input image: '$input_path'"
     inp = args["color"] ? load_color_image(input_path) : load_image(input_path)
 
+    bg = MonteCarloArt.resolve_background(args["background"], inp)
+    @info "Background: $(args["background"]) → Lab($(round(bg.l, digits=1)), $(round(bg.a, digits=1)), $(round(bg.b, digits=1)))"
+
     @info "Running Monte Carlo algorithm"
     circles, h, w = MonteCarloArt.render(inp, cfg)
 
     for (out_path, fmt) in outputs
         @info "Saving output to '$out_path' ($fmt)"
         if fmt == :svg
-            MonteCarloArt.write_svg(out_path, MonteCarloArt.render_svg(circles, h, w))
+            MonteCarloArt.write_svg(out_path, MonteCarloArt.render_svg(circles, h, w; bg=bg))
         elseif fmt == :gif
-            MonteCarloArt.save_gif(out_path, MonteCarloArt.render_gif(circles, h, w))
+            MonteCarloArt.save_gif(out_path, MonteCarloArt.render_gif(circles, h, w; bg=bg))
         elseif fmt == :png
-            save(out_path, convert.(RGB{N0f8}, MonteCarloArt.render_png(circles, h, w)))
+            save(out_path, convert.(RGB{N0f8}, MonteCarloArt.render_png(circles, h, w; bg=bg)))
         else
             error("Unsupported format for MonteCarloArt: $fmt")
         end
@@ -81,6 +84,10 @@ function parse_cmd()
         help = "Early stop when EMA of miss rate exceeds this. 1.0 = disabled (never stop early)."
         arg_type = Float64
         default = 0.99
+        "--background"
+        help = "Canvas background: white | black | mean (image mean color) | #rrggbb"
+        arg_type = String
+        default = "white"
     end
     parse_args(parser)
 end
