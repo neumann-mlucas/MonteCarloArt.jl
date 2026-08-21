@@ -17,7 +17,7 @@ const REL_STD_RADIUS = 0.4
 const MIN_RADIUS = 2
 const RMAX_REFRESH = 2000
 # Ellipse: r_minor = r_major * aspect. Flat regions circle; strong edges elongated.
-const ELLIPSE_MIN_ASPECT = 0.35
+const ELLIPSE_MIN_ASPECT = 0.45
 # Quantize stroke orientation → shared stencil cache entry.
 const THETA_BINS = 16
 # Flat-region threshold: below this edge magnitude, angle is noise → random theta.
