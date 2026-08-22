@@ -5,7 +5,7 @@
 # Usage:  ./test/scripts/baseline.sh                # full corpus
 #         ./test/scripts/baseline.sh aristotle.png  # subset (basename or path)
 #
-# Env: PHASE (default pre-p1), JULIA_NUM_THREADS (default 8), JULIA_BIN.
+# Env: PHASE (default baseline), JULIA_NUM_THREADS (default 8), JULIA_BIN.
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 source "${HERE}/lib.sh"
@@ -13,7 +13,7 @@ source "${HERE}/lib.sh"
 PHASE="${PHASE:-baseline}"
 set_out_dir "$PHASE"
 JULIA_OPTS=(-O3 -t "${JULIA_NUM_THREADS:-8}")
-CSV_HEADER="phase,image,config,mode,flag,line_strength,size,pins,steps,seconds,status,git_sha"
+CSV_HEADER="phase,image,config,steps,palette,tol,stop_miss,seconds,circles,status,git_sha"
 
 # name|steps|palette|tol|stop_miss
 # tol values sweep {0.08, 0.20}; stop_miss values sweep {0.99 (~off), 0.85 (early)}
