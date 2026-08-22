@@ -433,14 +433,13 @@ function save_gif(path::String, frames::GifFrames)
     save(path, stack(frames; dims=3), fps=GIF_FPS)
 end
 
-""" Draw an ellipse stroke in SVG format. Darker outline via L-shift toward black. """
+""" Draw an ellipse stroke in SVG format. """
 function draw_stroke(s::Stroke)::String
     fill = svg_color(s.color)
-    stroke = svg_color(Lab(max(s.color.l - 12, 0), s.color.a, s.color.b))
     cx = s.center[2]
     cy = s.center[1]
     deg = round(360 * s.theta_bin / THETA_BINS, digits=1)
-    """<ellipse cx="$cx" cy="$cy" rx="$(s.r_major)" ry="$(s.r_minor)" fill="$fill" stroke="$stroke" stroke-width="0.5" transform="rotate($deg $cx $cy)" />"""
+    """<ellipse cx="$cx" cy="$cy" rx="$(s.r_major)" ry="$(s.r_minor)" fill="$fill" transform="rotate($deg $cx $cy)" />"""
 end
 
 end
