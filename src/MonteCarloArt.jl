@@ -263,7 +263,13 @@ end
     if isempty(points)
         # center clipped off canvas; caller drops via isempty guard, color unread
         return (
-            (center=point, r_major=r_maj, r_minor=r_min, theta_bin=theta_bin, color=palette[1]),
+            (
+                center=point,
+                r_major=r_maj,
+                r_minor=r_min,
+                theta_bin=theta_bin,
+                color=palette[1],
+            ),
             points,
         )
     end
@@ -276,10 +282,7 @@ end
         base.a + randn() * JITTER_AB,
         base.b + randn() * JITTER_AB,
     )
-    (
-        (center=point, r_major=r_maj, r_minor=r_min, theta_bin=theta_bin, color=color),
-        points,
-    )
+    ((center=point, r_major=r_maj, r_minor=r_min, theta_bin=theta_bin, color=color), points)
 end
 
 function render_png(
@@ -289,7 +292,9 @@ function render_png(
     bg::Lab{Float64}=WHITE_LAB,
 )::Image
     out = fill(bg, h, w)
-    for s in strokes, p in gen_stroke_points((h, w), s.center, s.r_major, s.r_minor, s.theta_bin)
+    for s in strokes,
+        p in gen_stroke_points((h, w), s.center, s.r_major, s.r_minor, s.theta_bin)
+
         out[p.idx] = s.color
     end
     out
@@ -396,7 +401,10 @@ function render_svg(
 )::String
     io = IOBuffer()
     println(io, svg_open(width, height))
-    println(io, """<rect x="0" y="0" width="$width" height="$height" fill="$(svg_color(bg))" />""")
+    println(
+        io,
+        """<rect x="0" y="0" width="$width" height="$height" fill="$(svg_color(bg))" />""",
+    )
     for s in strokes
         println(io, draw_stroke(s))
     end
@@ -417,7 +425,8 @@ function render_gif(
     out = fill(bg, h, w)
     frames = GifFrames()
     for (n, s) in enumerate(strokes)
-        @inbounds for p in gen_stroke_points((h, w), s.center, s.r_major, s.r_minor, s.theta_bin)
+        @inbounds for p in
+                      gen_stroke_points((h, w), s.center, s.r_major, s.r_minor, s.theta_bin)
             out[p.idx] = s.color
         end
         if n % GIF_INTERVAL == 0 || n == length(strokes)

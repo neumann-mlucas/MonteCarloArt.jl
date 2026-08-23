@@ -36,11 +36,17 @@ function main()
     for (out_path, fmt) in outputs
         @info "Saving output to '$out_path' ($fmt)"
         if fmt == :svg
-            MonteCarloArt.write_svg(out_path, MonteCarloArt.render_svg(circles, h, w; bg=bg))
+            MonteCarloArt.write_svg(
+                out_path,
+                MonteCarloArt.render_svg(circles, h, w; bg=bg),
+            )
         elseif fmt == :gif
             MonteCarloArt.save_gif(out_path, MonteCarloArt.render_gif(circles, h, w; bg=bg))
         elseif fmt == :png
-            save(out_path, convert.(RGB{N0f8}, MonteCarloArt.render_png(circles, h, w; bg=bg)))
+            save(
+                out_path,
+                convert.(RGB{N0f8}, MonteCarloArt.render_png(circles, h, w; bg=bg)),
+            )
         else
             error("Unsupported format for MonteCarloArt: $fmt")
         end

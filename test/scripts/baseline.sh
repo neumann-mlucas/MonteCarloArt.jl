@@ -8,15 +8,18 @@
 # Env: PHASE (default baseline), JULIA_NUM_THREADS (default 8), JULIA_BIN.
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "${HERE}/lib.sh"
 
 PHASE="${PHASE:-baseline}"
 set_out_dir "$PHASE"
 JULIA_OPTS=(-O3 -t "${JULIA_NUM_THREADS:-8}")
+# shellcheck disable=SC2034  # consumed by run_sweep in lib.sh
 CSV_HEADER="phase,image,config,steps,palette,tol,stop_miss,seconds,circles,status,git_sha"
 
 # name|steps|palette|tol|stop_miss
 # tol values sweep {0.08, 0.20}; stop_miss values sweep {0.99 (~off), 0.85 (early)}
+# shellcheck disable=SC2034  # consumed by run_sweep in lib.sh
 CONFIGS=(
   "fast|100000|64|0.08|0.99"
   "full|300000|64|0.08|0.99"
