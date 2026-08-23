@@ -1,31 +1,32 @@
 # MonteCarloArt.jl
 
 <p align="center">
-  <img src="examples/marcus_aurelius.svg" alt="Marcus Aurelius Bust" width="600px" />
+  <img src="examples/starry_night.png" alt="Van Gogh — The Starry Night" width="600px" />
 </p>
 
-MonteCarloArt.jl is a Julia script that recreates images in a pointillist style using a greedy Monte Carlo sampling algorithm. The process begins by extracting a reduced color palette of N colors from the original image. The script then attempts to place small colored dots (sparse-overlap, not disjoint) onto a blank canvas.
+MonteCarloArt.jl is a Julia script that recreates images in a pointillist style using a greedy Monte Carlo sampling algorithm. The process begins by extracting a reduced color palette of N colors from the original image. The script then attempts to place small colored strokes — oriented ellipses (sparse-overlap, not disjoint) — onto a blank canvas.
 
-At each step a batch of dots is proposed in parallel — each at a random position biased toward high-error regions via importance sampling on the residual map. A dot is committed sequentially iff the average overlap under it is below a fixed threshold:
+At each step a batch of strokes is proposed in parallel — each at a random position biased toward high-error regions via importance sampling on the residual map. A stroke is committed sequentially iff the average overlap under it is below a fixed threshold:
 
 $$
 \text{overlap} = \frac{1}{N} \sum_{p \in \text{points}} \text{penalty}(p)
 $$
 
 $$
-\text{Draw circle if} \quad \text{overlap} < \text{overlap-tolerance}
+\text{Draw stroke if} \quad \text{overlap} < \text{overlap-tolerance}
 $$
 
-The color of each dot is selected as the closest match from the palette to the original image’s color at the proposed position. Over time, this method produces an image with subtle color blending and visual texture, characteristic of pointillist art.
+Stroke color is drawn from the palette by softmax sampling on Lab distance (temperature-controlled — argmin at T→0, more uniform mixing at higher T), then jittered per Lab channel to break up flat-poster banding. Over time, this method produces an image with subtle color blending and visual texture, characteristic of pointillist art.
 
 You can control several parameters to influence the output:
 
-1. **`--steps`:** upper bound on algorithm steps (more steps = more dots)
+1. **`--steps`:** upper bound on algorithm steps (more steps = more strokes)
 2. **`--color-palette`:** number of colors in the palette
-3. **`--overlap-tolerance`:** mean soft-penalty threshold under a candidate circle. Higher = denser packing (default 0.15)
+3. **`--overlap-tolerance`:** mean soft-penalty threshold under a candidate stroke. Higher = denser packing (default 0.15)
 4. **`--stop-miss-rate`:** EMA miss-rate threshold for early termination when the canvas saturates (default 0.99; 1.0 = disabled)
+5. **`--background`:** canvas background — `white | black | mean | #rrggbb` (default `white`)
 
-Circle radii are sampled from a normal distribution scaled to image size **and shrunk in high-edge regions** (Sobel-magnitude driven — fine detail gets small dots, flat regions get big dots).
+Stroke geometry is **edge-aware oriented ellipses**: base radius sampled from a normal distribution scaled to image size; in high-edge regions (Sobel-driven) the ellipse aspect shrinks toward 0.45 and its major axis aligns with the local isophote (perpendicular to the gradient). Flat regions get near-circular strokes with random orientation. Fine detail is preserved by directional strokes; flat regions get chunkier coverage.
 
 Overlap penalty is a **dome-shaped falloff** (1 at circle center, 0 at edge) accumulated on the canvas — softer than binary occupancy, gives natural spacing.
 
@@ -56,28 +57,33 @@ Output format is inferred from the `-o` file extension (`.png` or `.svg`).
 $ julia main.jl --help
 usage: main.jl -i INPUT [-o OUTPUT] [--steps STEPS] [-v] [--color]
                [--color-palette COLOR-PALETTE] [-t OVERLAP-TOLERANCE]
-               [--stop-miss-rate STOP-MISS-RATE] [-h]
+               [--stop-miss-rate STOP-MISS-RATE]
+               [--background BACKGROUND] [-h]
 
 optional arguments:
-  -i, --input INPUT     Input image path (required)
-  -o, --output OUTPUT   Output path with extension (.png/.svg/.gif);
-                        default "output.svg"
-  --steps STEPS         Number of iterations (proportional to number
-                        of circles) (type: Int64, default: 200000)
+  -i, --input INPUT     input image path
+  -o, --output OUTPUT   output path with extension (.png/.svg/.gif);
+                        comma-separate for multiple (default:
+                        "output.svg")
+  --steps STEPS         algorithm iteration count (type: Int64,
+                        default: 200000)
   -v, --verbose         verbose (debug) logging
   --color               Enable color mode (use input colors instead of
                         grayscale)
   --color-palette COLOR-PALETTE
-                        Number of colors in the palette
-                        (type: Int64, default: 64)
+                        Number of colors in the palette (type: Int64,
+                        default: 64)
   -t, --overlap-tolerance OVERLAP-TOLERANCE
                         Mean soft-penalty threshold under a candidate
-                        circle. Higher = denser packing.
-                        (type: Float64, default: 0.15)
+                        circle. Higher = denser packing. (type:
+                        Float64, default: 0.15)
   --stop-miss-rate STOP-MISS-RATE
                         Early stop when EMA of miss rate exceeds this.
-                        1.0 = disabled (never stop early).
-                        (type: Float64, default: 0.99)
+                        1.0 = disabled (never stop early). (type:
+                        Float64, default: 0.99)
+  --background BACKGROUND
+                        Canvas background: white | black | mean (image
+                        mean color) | #rrggbb (default: "white")
   -h, --help            show this help message and exit
 
 ```
@@ -117,42 +123,75 @@ julia -O3 -t 8 main.jl --steps 400000 -i input.jpg -o output.svg
 ```
 
 
-- **Animated GIF (replay of committed circles, snapshot every 100):**
+- **Multiple Outputs (comma-separated, single run):**
+```bash
+julia -O3 -t 8 main.jl --color --steps 400000 \
+    -i input.jpg -o output.png,output.svg
+```
+
+
+- **Custom Background (e.g. dark canvas for night scenes):**
+```bash
+julia -O3 -t 8 main.jl --color --background black \
+    -i input.jpg -o output.png
+# also: --background mean | --background '#1a1a2e'
+```
+
+
+- **Animated GIF (replay of committed strokes, snapshot every 100):**
 ```bash
 julia -O3 -t 8 main.jl --color --steps 100000 -i input.jpg -o output.gif
 ```
-Frames = `n_circles / 100`, playback = 15 fps. File size scales with input resolution × frame count — downsize input for smaller GIFs.
+Frames = `n_strokes / 100`, playback = 15 fps. File size scales with input resolution × frame count — downsize input for smaller GIFs.
 
 
-- **Recommended Settings for Higher-resolution:**
+- **Recommended Settings for Higher-resolution (denser packing, higher stroke count):**
 ```bash
-julia -O3 -t 8 main.jl --color --steps 400000 \
-    --stop-miss-rate 0.95 \
-    -i input.jpg -o output.svg
+julia -O3 -t 8 main.jl --color --steps 600000 \
+    -t 0.25 --stop-miss-rate 0.99 \
+    -i input.jpg -o output.png
 ```
 
 
 ### Gallery
 
-- **City of Sao Paulo**
+- **Vermeer — *Girl with a Pearl Earring*** (smooth skin gradients + pearl highlight)
 
 <p align="center">
-  <img src="examples/sao_paulo_01.svg" alt="SP 01" />
+  <img src="examples/vermeer_pearl.png" alt="Vermeer — Girl with a Pearl Earring" width="600px" />
 </p>
 
 
+- **Da Vinci — *Lady with an Ermine*** (portrait detail + fur texture)
+
 <p align="center">
-  <img src="examples/sao_paulo_02.svg" alt="SP 02" />
+  <img src="examples/ladywithermine.png" alt="Da Vinci — Lady with an Ermine" width="600px" />
+</p>
+
+
+- **Botticelli — *The Birth of Venus*** (soft skin + flowing hair, wide tonal range)
+
+<p align="center">
+  <img src="examples/venus.png" alt="Botticelli — The Birth of Venus" width="600px" />
+</p>
+
+
+- **Michelangelo — *David*** (monochrome marble — edge-aware stroke stress test)
+
+<p align="center">
+  <img src="examples/davi.png" alt="Michelangelo — David" width="600px" />
 </p>
 
 
 ### TODO
 
-See `TASKS.md`. Recently shipped: edge-aware radius (Sobel-driven),
-soft dome penalty, batch dedup, dropped complement colorspace, dropped
-alpha blend, GIF output. Backlog: palette locality (per-region k-means)
-and residual-driven color pick (see TASKS.md Task 1) remain candidates
-if visual quality still lags.
+See `TASKS.md`. Recently shipped: oriented ellipses (edge-aligned via
+Sobel gradient), softmax palette pick with Lab-channel jitter,
+`--background` option (white | black | mean | #rrggbb), multi-output
+via comma-separated `-o`, edge-aware radius, soft dome penalty, batch
+dedup, GIF output. Backlog: palette locality (per-region k-means) and
+residual-driven color pick (see TASKS.md Task 1) remain candidates if
+visual quality still lags.
 
 
 ---
