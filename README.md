@@ -36,7 +36,6 @@ Parallelism is auto-derived from Julia's thread count (`julia -t N`). Progress l
 
 The script supports gray scale mode and can optionally export the output as an SVG (**if your computer can handle a huge SVG**). Higher-resolution input images generally produce better results.
 
-
 ## Requirements
 
 The following Julia packages are required:
@@ -45,7 +44,6 @@ The following Julia packages are required:
 - `Clustering`
 - `Colors`
 - `Images`
-
 
 ## Usage
 
@@ -91,108 +89,93 @@ optional arguments:
 Threading is auto-derived from Julia's thread count — run with `-t N`
 to parallelize candidate proposals. Debug logging: `JULIA_DEBUG=MonteCarloArt`.
 
-
 - **Gray Scale Mode:**
+
 ```bash
 julia -O3 main.jl -i input.jpg -o output.png
 ```
 
-
 - **Color Mode with Custom Color Palette:**
+
 ```bash
 julia -O3 main.jl --color --color-palette 64 -i input.jpg -o output.png
 ```
 
-
 - **More Iterative Steps:**
+
 ```bash
 julia -O3 main.jl --steps 400000 -i input.jpg -o output.png
 ```
 
-
 - **Early Stop on Saturated Canvas (~30% wall-time savings):**
+
 ```bash
 julia -O3 -t 8 main.jl --color --steps 400000 \
     --stop-miss-rate 0.95 -i input.jpg -o output.png
 ```
 
-
 - **SVG Output (extension picks the format):**
+
 ```bash
 julia -O3 -t 8 main.jl --steps 400000 -i input.jpg -o output.svg
 ```
 
-
 - **Multiple Outputs (comma-separated, single run):**
+
 ```bash
 julia -O3 -t 8 main.jl --color --steps 400000 \
     -i input.jpg -o output.png,output.svg
 ```
 
-
 - **Custom Background (e.g. dark canvas for night scenes):**
+
 ```bash
 julia -O3 -t 8 main.jl --color --background black \
     -i input.jpg -o output.png
 # also: --background mean | --background '#1a1a2e'
 ```
 
-
 - **Animated GIF (replay of committed strokes, snapshot every 100):**
+
 ```bash
 julia -O3 -t 8 main.jl --color --steps 100000 -i input.jpg -o output.gif
 ```
+
 Frames = `n_strokes / 100`, playback = 15 fps. File size scales with input resolution × frame count — downsize input for smaller GIFs.
 
-
 - **Recommended Settings for Higher-resolution (denser packing, higher stroke count):**
+
 ```bash
 julia -O3 -t 8 main.jl --color --steps 600000 \
     -t 0.25 --stop-miss-rate 0.99 \
     -i input.jpg -o output.png
 ```
 
-
 ### Gallery
 
-- **Vermeer — *Girl with a Pearl Earring*** (smooth skin gradients + pearl highlight)
+- **Vermeer — _Girl with a Pearl Earring_** (smooth skin gradients + pearl highlight)
 
 <p align="center">
   <img src="examples/vermeer_pearl.png" alt="Vermeer — Girl with a Pearl Earring" width="600px" />
 </p>
 
-
-- **Da Vinci — *Lady with an Ermine*** (portrait detail + fur texture)
+- **Da Vinci — _Lady with an Ermine_** (portrait detail + fur texture)
 
 <p align="center">
   <img src="examples/ladywithermine.png" alt="Da Vinci — Lady with an Ermine" width="600px" />
 </p>
 
-
-- **Botticelli — *The Birth of Venus*** (soft skin + flowing hair, wide tonal range)
+- **Botticelli — _The Birth of Venus_** (soft skin + flowing hair, wide tonal range)
 
 <p align="center">
   <img src="examples/venus.png" alt="Botticelli — The Birth of Venus" width="600px" />
 </p>
 
-
-- **Michelangelo — *David*** (monochrome marble — edge-aware stroke stress test)
+- **Michelangelo — _David_** (monochrome marble — edge-aware stroke stress test)
 
 <p align="center">
   <img src="examples/davi.png" alt="Michelangelo — David" width="600px" />
 </p>
-
-
-### TODO
-
-See `TASKS.md`. Recently shipped: oriented ellipses (edge-aligned via
-Sobel gradient), softmax palette pick with Lab-channel jitter,
-`--background` option (white | black | mean | #rrggbb), multi-output
-via comma-separated `-o`, edge-aware radius, soft dome penalty, batch
-dedup, GIF output. Backlog: palette locality (per-region k-means) and
-residual-driven color pick (see TASKS.md Task 1) remain candidates if
-visual quality still lags.
-
 
 ---
 
