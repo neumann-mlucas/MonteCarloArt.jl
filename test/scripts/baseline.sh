@@ -8,7 +8,7 @@
 # Env: PHASE (default baseline), JULIA_NUM_THREADS (default 8), JULIA_BIN.
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-# shellcheck source-path=SCRIPTDIR source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh disable=SC1091
 source "${HERE}/lib.sh"
 
 PHASE="${PHASE:-baseline}"
@@ -41,7 +41,7 @@ run_config() {
   julia_timed "${out_stem}.log" "${JULIA_OPTS[@]}" --project="$PROJECT_DIR" main.jl \
     -i "$input" -o "${out_stem}.png,${out_stem}.svg" \
     --color --color-palette "$palette" --steps "$steps" \
-    -t "$tol" --stop-miss-rate "$stop_miss"
+    --overlap-tolerance "$tol" --stop-miss-rate "$stop_miss"
 
   local circles
   circles="$(extract_circles "${out_stem}.log")"

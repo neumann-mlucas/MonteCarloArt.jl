@@ -24,7 +24,7 @@ You can control several parameters to influence the output:
 2. **`--color-palette`:** number of colors in the palette
 3. **`--overlap-tolerance`:** mean soft-penalty threshold under a candidate stroke. Higher = denser packing (default 0.15)
 4. **`--stop-miss-rate`:** EMA miss-rate threshold for early termination when the canvas saturates (default 0.99; 1.0 = disabled)
-5. **`--background`:** canvas background — `white | black | mean | #rrggbb` (default `white`)
+5. **`--background`:** canvas background — `white | black | mean | #rrggbb` (default `white`). The residual is seeded against it, so regions already matching the bare canvas get no strokes.
 
 Stroke geometry is **edge-aware oriented ellipses**: base radius sampled from a normal distribution scaled to image size; in high-edge regions (Sobel-driven) the ellipse aspect shrinks toward 0.45 and its major axis aligns with the local isophote (perpendicular to the gradient). Flat regions get near-circular strokes with random orientation. Fine detail is preserved by directional strokes; flat regions get chunkier coverage.
 
@@ -38,23 +38,26 @@ The script supports gray scale mode and can optionally export the output as an S
 
 ## Requirements
 
-The following Julia packages are required:
+The following Julia packages are required (pinned in `Manifest.toml`; `just install`):
 
 - `ArgParse`
 - `Clustering`
 - `Colors`
+- `FileIO`
 - `Images`
+- `Dates`, `Logging`, `Printf`, `Random`, `Statistics` (stdlib)
 
 ## Usage
 
 Run the script via the command line:
 
-Output format is inferred from the `-o` file extension (`.png` or `.svg`).
+Output format is inferred from the `-o` file extension (`.png`, `.svg`, `.gif`; default `output.png`).
 
 ```bash
 $ julia main.jl --help
 usage: main.jl -i INPUT [-o OUTPUT] [--steps STEPS] [-v] [--color]
-               [--color-palette COLOR-PALETTE] [-t OVERLAP-TOLERANCE]
+               [--color-palette COLOR-PALETTE]
+               [--overlap-tolerance OVERLAP-TOLERANCE]
                [--stop-miss-rate STOP-MISS-RATE]
                [--background BACKGROUND] [-h]
 
@@ -62,7 +65,7 @@ optional arguments:
   -i, --input INPUT     input image path
   -o, --output OUTPUT   output path with extension (.png/.svg/.gif);
                         comma-separate for multiple (default:
-                        "output.svg")
+                        "output.png")
   --steps STEPS         algorithm iteration count (type: Int64,
                         default: 200000)
   -v, --verbose         verbose (debug) logging
@@ -71,7 +74,7 @@ optional arguments:
   --color-palette COLOR-PALETTE
                         Number of colors in the palette (type: Int64,
                         default: 64)
-  -t, --overlap-tolerance OVERLAP-TOLERANCE
+  --overlap-tolerance OVERLAP-TOLERANCE
                         Mean soft-penalty threshold under a candidate
                         circle. Higher = denser packing. (type:
                         Float64, default: 0.15)
@@ -87,7 +90,7 @@ optional arguments:
 ```
 
 Threading is auto-derived from Julia's thread count — run with `-t N`
-to parallelize candidate proposals. Debug logging: `JULIA_DEBUG=MonteCarloArt`.
+to parallelize candidate proposals. RNG is seeded (42): output is reproducible for a fixed `-t N` (batch size = thread count, so different `N` gives different output). Debug logging: `JULIA_DEBUG=MonteCarloArt`.
 
 - **Gray Scale Mode:**
 
@@ -147,8 +150,15 @@ Frames = `n_strokes / 100`, playback = 15 fps. File size scales with input resol
 
 ```bash
 julia -O3 -t 8 main.jl --color --steps 600000 \
-    -t 0.25 --stop-miss-rate 0.99 \
+    --overlap-tolerance 0.25 --stop-miss-rate 0.99 \
     -i input.jpg -o output.png
+```
+
+### Tests
+
+```bash
+just test    # synthetic 64×64 fixtures, fixed seed
+just check   # JET lint + tests + shellcheck
 ```
 
 ### Gallery
