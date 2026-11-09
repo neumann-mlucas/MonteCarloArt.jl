@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "828f357ae55408930ff8ce4bca27aaeb5f7e028a"
+project_hash = "ef2c97f1858cc97ee1e54059d2cb6ca9328d6f14"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -779,7 +779,7 @@ uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 version = "1.11.0"
 
 [[deps.MonteCarloArt]]
-deps = ["ArgParse", "Clustering", "Colors", "Dates", "FileIO", "Images", "Logging", "Printf", "Statistics"]
+deps = ["ArgParse", "Clustering", "Colors", "Dates", "FileIO", "Images", "Logging", "Printf", "Random", "Statistics"]
 path = "."
 uuid = "9fca835f-2eb6-41cd-a910-98d986ad5ece"
 version = "0.1.0"

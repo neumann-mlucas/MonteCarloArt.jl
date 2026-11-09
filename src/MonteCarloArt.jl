@@ -127,7 +127,11 @@ end
 
 """ Main Monte Carlo Art algorithm. Returns (strokes, height, width);
     caller picks a `render_*` writer per output format. """
-function render(inp::Image, cfg::Config)::Tuple{Vector{Stroke},Int,Int}
+function render(
+    inp::Image,
+    cfg::Config;
+    bg::Lab{Float64}=WHITE_LAB,
+)::Tuple{Vector{Stroke},Int,Int}
     h, w = size(inp)
     penalty = zeros(Float64, h, w)
     strokes = Stroke[]
@@ -140,10 +144,9 @@ function render(inp::Image, cfg::Config)::Tuple{Vector{Stroke},Int,Int}
 
     # importance-sampling state: residual[i] = ||inp[i] - current_canvas[i]||
     # in Lab. Sampling proposed centers proportional to residual concentrates
-    # circles on under-approximated regions. Seed canvas as image mean so
-    # initial residual reflects local deviation, not raw luminance.
-    canvas_seed = mean_color(vec(inp))
-    residual = color_distance.(inp, Ref(canvas_seed))
+    # circles on under-approximated regions. Seeded against the actual
+    # background, so regions the bare canvas already matches draw no strokes.
+    residual = color_distance.(inp, Ref(bg))
     r_max = maximum(residual)
 
     # thread count from Threads.nthreads(); requires JULIA_NUM_THREADS or `julia -t N`

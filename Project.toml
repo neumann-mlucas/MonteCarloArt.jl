@@ -1,7 +1,7 @@
 name = "MonteCarloArt"
 uuid = "9fca835f-2eb6-41cd-a910-98d986ad5ece"
-authors = ["neumann.m.lucas@gmail.com"]
 version = "0.1.0"
+authors = ["neumann.m.lucas@gmail.com"]
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -12,7 +12,9 @@ FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
+Random = "1.11.0"
 julia = "1.10"

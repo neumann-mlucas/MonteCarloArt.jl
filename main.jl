@@ -6,10 +6,12 @@ using .MonteCarloArt
 using ArgParse
 using FileIO
 using Images
+using Random
 
 """ Main function: parse arguments, load image, run algorithm, and save output.
     Debug output: --verbose or JULIA_DEBUG=MonteCarloArt,MonteCarloArtMain. """
 function main()
+    Random.seed!(42)  # reproducible for a fixed -t N; batch size = nthreads()
     args = parse_cmd()
     MonteCarloArt.setup_logging(args)
     validate_args(args)
@@ -31,7 +33,7 @@ function main()
     @info "Background: $(args["background"]) → Lab($(round(bg.l, digits=1)), $(round(bg.a, digits=1)), $(round(bg.b, digits=1)))"
 
     @info "Running Monte Carlo algorithm"
-    circles, h, w = MonteCarloArt.render(inp, cfg)
+    circles, h, w = MonteCarloArt.render(inp, cfg; bg=bg)
 
     for (out_path, fmt) in outputs
         @info "Saving output to '$out_path' ($fmt)"
@@ -72,7 +74,7 @@ function parse_cmd()
     MonteCarloArt.add_common_args!(
         parser;
         steps_default=200000,
-        output_default="output.svg",
+        output_default="output.png",
     )
     @add_arg_table! parser begin
         "--color"
@@ -82,7 +84,7 @@ function parse_cmd()
         help = "Number of colors in the palette"
         arg_type = Int
         default = 64
-        "--overlap-tolerance", "-t"
+        "--overlap-tolerance"
         help = "Mean soft-penalty threshold under a candidate circle. Higher = denser packing."
         arg_type = Float64
         default = 0.15
