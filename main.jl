@@ -11,8 +11,8 @@ using Random
 """ Main function: parse arguments, load image, run algorithm, and save output.
     Debug output: --verbose or JULIA_DEBUG=MonteCarloArt,MonteCarloArtMain. """
 function main()
-    Random.seed!(42)  # reproducible for a fixed -t N; batch size = nthreads()
     args = parse_cmd()
+    Random.seed!(args["seed"])  # reproducible for a fixed -t N; batch size = nthreads()
     MonteCarloArt.setup_logging(args)
     validate_args(args)
 
@@ -27,7 +27,9 @@ function main()
 
     input_path = args["input"]
     @info "Loading input image: '$input_path'"
-    inp = args["color"] ? load_color_image(input_path) : load_image(input_path)
+    load = args["color"] ? load_color_image : load_image
+    inp = load(input_path, args["size"])
+    @info "Canvas: $(size(inp, 2))×$(size(inp, 1))"
 
     bg = MonteCarloArt.resolve_background(args["background"], inp)
     @info "Background: $(args["background"]) → Lab($(round(bg.l, digits=1)), $(round(bg.a, digits=1)), $(round(bg.b, digits=1)))"
@@ -60,6 +62,7 @@ end
 """ Assert CLI args are in sane ranges. Trust boundary — fail loud, not silent NaN. """
 function validate_args(args::AbstractDict)
     args["steps"] > 0 || error("--steps must be > 0 (got $(args["steps"]))")
+    args["size"] > 0 || error("--size must be > 0 (got $(args["size"]))")
     args["color-palette"] > 0 ||
         error("--color-palette must be > 0 (got $(args["color-palette"]))")
     0.0 <= args["overlap-tolerance"] <= 1.0 ||
@@ -96,6 +99,14 @@ function parse_cmd()
         help = "Canvas background: white | black | mean (image mean color) | #rrggbb"
         arg_type = String
         default = "white"
+        "--size", "-s"
+        help = "Max canvas side in pixels; larger inputs are downscaled (aspect kept), smaller kept as is"
+        arg_type = Int
+        default = 1024
+        "--seed"
+        help = "RNG seed (reproducible for a fixed -t N)"
+        arg_type = Int
+        default = 42
     end
     parse_args(parser)
 end

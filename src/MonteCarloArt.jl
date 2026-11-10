@@ -95,17 +95,21 @@ function resolve_background(spec::AbstractString, inp::Image)::Lab{Float64}
     end
 end
 
-function load_image(path::String)::Image
+""" Load image, downscaled (aspect kept) so its long side is ≤ `max_size`.
+    Never upscales. Unlike StringArt/EdgeFlowArt, no square crop: strokes
+    are free-placed, so any aspect ratio works. """
+function load_fit(path::String, max_size::Int)
     isfile(path) || error("Image file not found: $path")
     img = Images.load(path)
-    convert.(Lab{Float64}, Gray.(img))
+    s = max_size / maximum(size(img))
+    s < 1 ? Images.imresize(img; ratio=s) : img
 end
 
-function load_color_image(path::String)::Image
-    isfile(path) || error("Image file not found: $path")
-    img = Images.load(path)
-    convert.(Lab{Float64}, img)
-end
+load_image(path::String, max_size::Int)::Image =
+    convert.(Lab{Float64}, Gray.(load_fit(path, max_size)))
+
+load_color_image(path::String, max_size::Int)::Image =
+    convert.(Lab{Float64}, load_fit(path, max_size))
 
 """ Sobel-style edge features of L channel: normalized magnitude [0,1] and
     gradient angle (atan2(gy, gx), radians). Angle is undefined where mag=0;

@@ -25,6 +25,7 @@ You can control several parameters to influence the output:
 3. **`--overlap-tolerance`:** mean soft-penalty threshold under a candidate stroke. Higher = denser packing (default 0.15)
 4. **`--stop-miss-rate`:** EMA miss-rate threshold for early termination when the canvas saturates (default 0.99; 1.0 = disabled)
 5. **`--background`:** canvas background — `white | black | mean | #rrggbb` (default `white`). The residual is seeded against it, so regions already matching the bare canvas get no strokes.
+6. **`--size`:** max canvas side in pixels (default 1024). Larger inputs are downscaled keeping their aspect ratio; smaller ones are used as is.
 
 Stroke geometry is **edge-aware oriented ellipses**: base radius sampled from a normal distribution scaled to image size; in high-edge regions (Sobel-driven) the ellipse aspect shrinks toward 0.45 and its major axis aligns with the local isophote (perpendicular to the gradient). Flat regions get near-circular strokes with random orientation. Fine detail is preserved by directional strokes; flat regions get chunkier coverage.
 
@@ -59,7 +60,7 @@ usage: main.jl -i INPUT [-o OUTPUT] [--steps STEPS] [-v] [--color]
                [--color-palette COLOR-PALETTE]
                [--overlap-tolerance OVERLAP-TOLERANCE]
                [--stop-miss-rate STOP-MISS-RATE]
-               [--background BACKGROUND] [-h]
+               [--background BACKGROUND] [-s SIZE] [--seed SEED] [-h]
 
 optional arguments:
   -i, --input INPUT     input image path
@@ -85,12 +86,16 @@ optional arguments:
   --background BACKGROUND
                         Canvas background: white | black | mean (image
                         mean color) | #rrggbb (default: "white")
+  -s, --size SIZE       Max canvas side in pixels; larger inputs are
+                        downscaled (aspect kept), smaller kept as is
+                        (type: Int64, default: 1024)
+  --seed SEED           RNG seed (reproducible for a fixed -t N)
+                        (type: Int64, default: 42)
   -h, --help            show this help message and exit
-
 ```
 
 Threading is auto-derived from Julia's thread count — run with `-t N`
-to parallelize candidate proposals. RNG is seeded (42): output is reproducible for a fixed `-t N` (batch size = thread count, so different `N` gives different output). Debug logging: `JULIA_DEBUG=MonteCarloArt`.
+to parallelize candidate proposals. RNG is seeded (`--seed`, default 42): output is reproducible for a fixed `-t N` (batch size = thread count, so different `N` gives different output). Debug logging: `JULIA_DEBUG=MonteCarloArt`.
 
 - **Gray Scale Mode:**
 
